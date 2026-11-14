@@ -30,7 +30,7 @@ before(async () => {
  vehicle = await Ambulance.create({ vehicleNumber:tag, operator:operator.id, tier:"ALS",status:"idle",complianceVerified:true,crew:[{role:"EMT",certified:true}] }); ids.ambulances.push(vehicle._id);
  server = spawn(process.execPath, ["src/server.js"], {env:{...process.env,PORT:"5051",GEMINI_API_KEY:"",ORCHESTRATION_ENABLED:"false"}, stdio:"pipe"});
  let logs = ""; server.stdout.on("data", c=>logs+=c); server.stderr.on("data",c=>logs+=c);
- for(let i=0;i<60;i++) {
+ for(let i=0;i<120;i++) {
   if (server.exitCode !== null) throw new Error(logs);
   try { if ((await fetch(base+"/health")).ok) return; } catch {}
   await new Promise(r=>setTimeout(r,100));

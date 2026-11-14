@@ -54,11 +54,26 @@ async function allocate(trip, io, decide) {
         { status: "requested", ambulanceId: null, autoDispatchAt: new Date() });
       await tx.ambulance.update({ where: { id: trip.ambulanceId }, data: { status: "idle", version: { increment: 1 } } });
     });
-    if (driverId) io?.in(`driver:${driverId}`).socketsLeave(`trip:${trip.id}`);
+    if (driverId) {
+      io?.in(`driver:${driverId}`).socketsLeave(`trip:${trip.id}`);
+      io?.to(`driver:${driverId}`).emit("case:refresh", { tripId: trip.id });
+    }
+    io?.to("driver").emit("case:refresh", { tripId: trip.id });
     notify(io, trip);
     return;
   }
   if (trip.status !== "requested") return;
+  await db.ambulance.updateMany({
+    where: {
+      status: "dispatched",
+      trips: {
+        none: {
+          status: { in: ["offered", "dispatched", "en_route", "arrived_pickup", "picked_up", "en_route_hospital", "arrived_hospital"] },
+        },
+      },
+    },
+    data: { status: "idle" },
+  });
   const fleet = await db.ambulance.findMany({ where: { status: "idle", driver: { role: "driver", isActive: true } }, include: { operator: true } });
   const excluded = [...activeChooser(trip, "ambulance:offer_expired"), ...activeChooser(trip, "ambulance:rejected")];
   const candidates = ambulanceCandidates(trip, fleet).filter(row => row.eligible && !excluded.includes(row.id)).slice(0, 8)
@@ -77,7 +92,24 @@ async function allocate(trip, io, decide) {
     if (await reserveAutoDispatch(trip.id, id, vehicle.driverId, vehicle.version, {
       preferenceSource: decision.source, reasonCode: id === decision.output?.chosenId ? decision.output.reasonCode : "pickup_eta",
     }, trip)) {
-      notify(io, trip, null, vehicle.driverId);
+      const updatedTrip = await db.trip.findUnique({
+        where: { id: trip.id },
+        include: { ...include, patient: { select: { id: true, name: true, phone: true } } },
+      });
+      const formattedTrip = updatedTrip ? {
+        ...updatedTrip,
+        _id: updatedTrip.id,
+        patient: updatedTrip.patient ? { ...updatedTrip.patient, _id: updatedTrip.patient.id } : null,
+        hospital: updatedTrip.hospital ? { ...updatedTrip.hospital, _id: updatedTrip.hospital.id } : null,
+      } : trip;
+      const formattedAmbulance = vehicle ? { ...vehicle, _id: vehicle.id } : null;
+
+      if (vehicle.driverId) {
+        io?.to(`driver:${vehicle.driverId}`).emit("trip:assigned", { tripId: trip.id, ambulance: formattedAmbulance, trip: formattedTrip });
+        io?.to(`driver:${vehicle.driverId}`).emit("trip:matched", { tripId: trip.id, ambulance: formattedAmbulance, trip: formattedTrip });
+      }
+      io?.to("driver").emit("trip:assigned", { tripId: trip.id, ambulance: formattedAmbulance, trip: formattedTrip });
+      notify(io, updatedTrip || trip, null, vehicle.driverId);
       return;
     }
   }

@@ -34,8 +34,9 @@ export default function DriverDashboard() {
       setTrip(payload.trip);
 
       // Join this emergency trip's room
-      if (payload.trip._id) {
-        socket.emit("join:trip", payload.trip._id);
+      const tripId = payload.trip._id || payload.trip.id;
+      if (tripId) {
+        socket.emit("join:trip", tripId);
       }
     }
 
@@ -51,8 +52,9 @@ export default function DriverDashboard() {
       setTrip(payload.trip);
 
       // Join this emergency trip's room
-      if (payload.trip._id) {
-        socket.emit("join:trip", payload.trip._id);
+      const tripId = payload.trip._id || payload.trip.id;
+      if (tripId) {
+        socket.emit("join:trip", tripId);
       }
     }
 
@@ -61,14 +63,22 @@ export default function DriverDashboard() {
     }
   };
 
+  const handleTripStatus = (payload) => {
+    if (payload?.trip) {
+      setTrip(payload.trip);
+    }
+  };
+
   socket.on("case:refresh", loadDriverData);
   socket.on("trip:assigned", handleTripAssigned);
   socket.on("trip:matched", handleTripMatched);
+  socket.on("trip:status", handleTripStatus);
 
   return () => {
     socket.off("case:refresh", loadDriverData);
     socket.off("trip:assigned", handleTripAssigned);
     socket.off("trip:matched", handleTripMatched);
+    socket.off("trip:status", handleTripStatus);
 
     if (watchId.current !== null) {
       navigator.geolocation.clearWatch(
@@ -78,13 +88,14 @@ export default function DriverDashboard() {
   };
 }, []);
 useEffect(() => {
-  if (!trip?._id) {
+  const tripId = trip?._id || trip?.id;
+  if (!tripId) {
     return;
   }
 
   const socket = connectSocket();
-  socket.emit("join:trip", trip._id);
-}, [trip?._id]);
+  socket.emit("join:trip", tripId);
+}, [trip?._id, trip?.id]);
 
 
   async function loadDriverData() {
@@ -158,7 +169,8 @@ useEffect(() => {
   async function updateTripStatus(
     status
   ) {
-    if (!trip) {
+    const tripId = trip?._id || trip?.id;
+    if (!tripId) {
       return;
     }
 
@@ -168,7 +180,7 @@ useEffect(() => {
 
       const { data } =
         await api.patch(
-          `/dispatch/trip/${trip._id}/status`,
+          `/dispatch/trip/${tripId}/status`,
           {
             status,
           }
@@ -433,6 +445,37 @@ useEffect(() => {
 
       {trip && (
         <div className="mt-8 rounded-xl border border-line bg-white p-6">
+          {trip.status === "offered" && (
+            <div className="mb-6 rounded-lg border-2 border-signal bg-signal/10 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-signal-dark">
+                    ⚠️ New Emergency Dispatch Offer
+                  </p>
+                  <p className="mt-0.5 text-sm font-medium text-navy">
+                    Immediate patient response required. Accept to confirm ambulance dispatch.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={updatingStatus}
+                    onClick={() => updateTripStatus("dispatched")}
+                    className="rounded-full bg-signal-dark px-4 py-2 text-xs font-bold text-white shadow-sm hover:opacity-95 disabled:opacity-50"
+                  >
+                    ✓ Accept Dispatch
+                  </button>
+                  <button
+                    disabled={updatingStatus}
+                    onClick={() => updateTripStatus("rejected")}
+                    className="rounded-full border border-line bg-white px-4 py-2 text-xs font-semibold text-navy hover:border-signal-dark hover:text-signal-dark disabled:opacity-50"
+                  >
+                    ✕ Reject
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-ink/40">
@@ -440,7 +483,7 @@ useEffect(() => {
               </p>
 
               <h2 className="mt-1 text-xl font-semibold text-navy">
-                Trip #{String(trip._id).slice(-6)}
+                Trip #{String(trip._id || trip.id).slice(-6)}
               </h2>
             </div>
 
@@ -452,7 +495,54 @@ useEffect(() => {
             </span>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {/* ==========================
+              PATIENT QUERY & CLINICAL CONDITION
+          ========================== */}
+          <div className="mt-6 rounded-lg border border-red-200 bg-red-50/60 p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wide text-signal-dark">
+                Patient Query & Medical Condition
+              </p>
+              {trip.requestedAmbulanceTier && (
+                <span className="rounded-full bg-signal-dark/10 px-2.5 py-0.5 text-xs font-bold text-signal-dark">
+                  {trip.requestedAmbulanceTier} Required
+                </span>
+              )}
+            </div>
+
+            <p className="mt-2 text-base font-bold text-navy">
+              {Array.isArray(trip.symptoms) && trip.symptoms.length > 0
+                ? trip.symptoms.join(", ")
+                : trip.triage?.notes || "Emergency medical assistance requested"}
+            </p>
+
+            {trip.triage?.suggestedEquipment && trip.triage.suggestedEquipment.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-ink/60">Required Equipment & Medical Kits:</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {trip.triage.suggestedEquipment.map((eq, i) => (
+                    <span
+                      key={i}
+                      className="rounded border border-red-200 bg-white px-2 py-0.5 text-xs font-medium text-navy shadow-xs"
+                    >
+                      ⚕️ {eq}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {trip.triage?.requiredSpecialties && trip.triage.requiredSpecialties.length > 0 && (
+              <div className="mt-2">
+                <p className="text-xs font-semibold text-ink/60">Target Hospital Specialty:</p>
+                <p className="text-xs font-medium text-navy">
+                  {trip.triage.requiredSpecialties.join(" · ")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg bg-paper p-4">
               <p className="text-xs text-ink/40">
                 Patient

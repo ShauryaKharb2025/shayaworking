@@ -117,7 +117,7 @@ async function driverActiveTrip(req, res) {
       });
     }
 
-    const trip = await Trip.findOne({
+    let trip = await Trip.findOne({
       ambulance: ambulance._id,
       status: {
         $in: [
@@ -143,6 +143,29 @@ async function driverActiveTrip(req, res) {
           select: "name email phone",
         },
       });
+
+    if (!trip) {
+      const activePrismaTrip = await prisma.trip.findFirst({
+        where: {
+          ambulanceId: ambulance._id,
+          status: { in: ["offered", "dispatched", "en_route", "arrived_pickup", "picked_up", "arrived_hospital", "en_route_hospital"] },
+        },
+      });
+      if (activePrismaTrip) {
+        trip = await Trip.findById(activePrismaTrip.id)
+          .populate("patient", "name phone")
+          .populate("hospital", "name address phone")
+          .populate({
+            path: "ambulance",
+            populate: { path: "driver", select: "name email phone" },
+          });
+      }
+    }
+
+    if (!trip && ambulance.status === "dispatched") {
+      ambulance.status = "idle";
+      await Ambulance.findByIdAndUpdate(ambulance._id, { status: "idle" });
+    }
 
     return res.json({
       trip: trip || null,
@@ -961,7 +984,9 @@ async function updateTripStatus(
       trip.autoDispatchAt = null;
       trip.dispatchedAt = new Date();
       const vehicle = await Ambulance.findById(trip.ambulance);
-      trip.etaMinutes = Math.ceil(distanceKm(vehicle.location.coordinates, trip.pickupLocation.coordinates) * 2);
+      trip.etaMinutes = (vehicle?.location?.coordinates && trip.pickupLocation?.coordinates)
+        ? Math.ceil(distanceKm(vehicle.location.coordinates, trip.pickupLocation.coordinates) * 2)
+        : 8;
     }
     if (["arrived_pickup", "picked_up", "arrived_hospital", "handed_off"].includes(status)) trip.etaMinutes = null;
     if (status === "en_route_hospital") {
@@ -969,7 +994,9 @@ async function updateTripStatus(
         prisma.ambulance.findUnique({ where: { id: trip.ambulance } }),
         prisma.hospital.findUnique({ where: { id: trip.hospital } }),
       ]);
-      trip.etaMinutes = Math.ceil(distanceKm(vehicle.location.coordinates, destination.location.coordinates) * 2);
+      trip.etaMinutes = (vehicle?.location?.coordinates && destination?.location?.coordinates)
+        ? Math.ceil(distanceKm(vehicle.location.coordinates, destination.location.coordinates) * 2)
+        : 12;
     }
 
     /*

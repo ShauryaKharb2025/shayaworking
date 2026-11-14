@@ -63,7 +63,7 @@ describe("SOS dashboard",()=>{
 describe("shared role workspace",()=>{
  it("provides all role navigation and toggles notifications",()=>{
   show(<AppShell><p>Workspace</p></AppShell>);
-  expect(screen.getByRole("link",{name:"Sahay home"}).querySelector("img").getAttribute("src")).toBe("/sahay-mark.svg");
+  expect(screen.getByRole("link",{name:"Sahay home"}).querySelector("img").getAttribute("src")).toBe("/sahay-header.svg");
   expect(screen.getByRole("navigation",{name:"Role navigation"}).querySelectorAll("a")).toHaveLength(7);
   fireEvent.click(screen.getByRole("button",{name:"Notifications"}));
   expect(screen.getByText("Sign in to receive updates for your cases.")).toBeTruthy();

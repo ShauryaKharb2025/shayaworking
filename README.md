@@ -163,7 +163,8 @@ inspection of the running desktop/mobile layouts has not been completed.
 
 ## Brand assets
 
-Sahay uses a navy S mark with a coral heartbeat accent.
-Editable vector assets are frontend/public/sahay-mark.svg and sahay-logo.svg.
-Transparent PNG exports are provided alongside them. The mark is used in the
-application header and as the favicon.
+The supplied Sahay heart-and-heartbeat logo is used throughout the shared header
+and browser favicon. frontend/public/sahay-logo.png preserves the original uploaded
+image. SVG viewport compositions provide the horizontal header lockup
+(sahay-header.svg), full logo (sahay-logo.svg), and icon (sahay-mark.svg) without
+redrawing or changing the original artwork.

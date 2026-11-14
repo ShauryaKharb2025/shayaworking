@@ -19,3 +19,8 @@
 
 .sahay-brand>img{width:48px;height:48px;flex-shrink:0;display:block}.sahay-brand strong{font-size:29px;letter-spacing:-1.1px}
 @media(max-width:800px){.sahay-brand>img{width:38px;height:38px}.sahay-brand strong{font-size:24px}}
+
+/* The supplied Sahay artwork, arranged horizontally without redrawing the logo. */
+.sahay-brand>.sahay-brand-lockup{width:205px;height:56px;object-fit:contain;display:block}
+@media(max-width:800px){.sahay-brand>.sahay-brand-lockup{width:162px;height:48px}}
+@media(max-width:380px){.sahay-brand>.sahay-brand-lockup{width:140px;height:44px}}

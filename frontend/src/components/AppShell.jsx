@@ -15,7 +15,7 @@ export default function AppShell({children}) {
  return <div className="sahay-app">
   <header className="sahay-header">
    <button className="sahay-icon mobile-menu" onClick={()=>setOpen(!open)} aria-label="Toggle navigation">{open?<X/>:<Menu/>}</button>
-   <Link className="sahay-brand" to="/" aria-label="Sahay home"><img src="/sahay-mark.svg" alt="" width="48" height="48"/><strong>Sahay</strong></Link>
+   <Link className="sahay-brand" to="/" aria-label="Sahay home"><img className="sahay-brand-lockup" src="/sahay-header.svg" alt="" width="260" height="68"/></Link>
    <div className="sahay-tagline">National Ambulance Aggregator for India</div>
    <nav className="sahay-topnav" aria-label="Main navigation">
     <NavLink to="/" end>Home</NavLink><NavLink to="/how-it-works">How it Works</NavLink><NavLink to="/coverage">Coverage</NavLink><NavLink to="/hospital">For Hospitals</NavLink>

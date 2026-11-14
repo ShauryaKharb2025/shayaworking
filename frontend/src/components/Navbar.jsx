@@ -10,11 +10,7 @@ export default function Navbar() {
     <header className="border-b border-line bg-paper/90 backdrop-blur sticky top-0 z-40">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/sahay-mark.svg" alt="" className="h-10 w-10" />
-
-          <span className="font-display text-lg font-semibold text-navy">
-            Sahay
-          </span>
+          <img src="/sahay-header.svg" alt="Sahay" width="210" height="55" />
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm font-medium text-ink/70 md:flex">

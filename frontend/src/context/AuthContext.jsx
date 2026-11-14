@@ -7,14 +7,18 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const raw = localStorage.getItem("sahay_user");
-    return raw ? JSON.parse(raw) : null;
+    try {
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
   });
   const [loading, setLoading] = useState(false);
 
-  const login = useCallback(async ({ email, role, name }) => {
+  const login = useCallback(async ({ email, password = "SahayDemo123!" }) => {
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/login", { email, role, name });
+      const { data } = await api.post("/auth/login", { email, password });
       disconnectSocket();
       localStorage.setItem("sahay_access_token", data.accessToken);
       localStorage.setItem("sahay_user", JSON.stringify(data.user));

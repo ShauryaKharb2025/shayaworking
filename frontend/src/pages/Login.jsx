@@ -7,13 +7,16 @@ const DEMO_ACCOUNTS = [
   { role: "patient", label: "Patient", email: "patient@sahay.org", name: "Aarav Sharma" },
   { role: "dispatcher", label: "Dispatcher", email: "dispatcher@sahay.org", name: "Priya Nair" },
   { role: "hospital", label: "Hospital ER", email: "hospital@sahay.org", name: "Dr. Alok Verma" },
-  { role: "driver", label: "Driver", email: "driver1@sewa-ambulance.org", name: "Ramesh Kumar" },
+  { role: "driver", label: "Driver", email: "driver.ramesh@sahay.local", name: "Ramesh Kumar" },
   { role: "operator", label: "Operator", email: "operator@sewa-ambulance.org", name: "Sewa Trust" },
+  { role: "clinician", label: "Clinician", email: "clinician@sahay.org" },
+  { role: "caregiver", label: "Caregiver", email: "caregiver@sahay.org" },
+  { role: "admin", label: "Admin", email: "admin@sahay.org" },
 ];
 
 export default function Login() {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("patient");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
@@ -23,8 +26,7 @@ export default function Login() {
     setError(null);
     setSubmitting(true);
     const targetEmail = account?.email || email;
-    const targetRole = account?.role || role;
-    const targetName = account?.name;
+    const targetPassword = account ? "SahayDemo123!" : password;
 
     if (!targetEmail.trim()) {
       setError("Please enter a valid email address");
@@ -33,7 +35,7 @@ export default function Login() {
     }
 
     try {
-      const user = await login({ email: targetEmail.trim(), role: targetRole, name: targetName });
+      const user = await login({ email: targetEmail.trim(), password: targetPassword });
       navigate(roleHome(user.role));
     } catch (err) {
       setError(err?.response?.data?.message || "Sign in failed. Please try again.");
@@ -83,22 +85,10 @@ export default function Login() {
         </div>
 
         <div>
-          <label htmlFor="role" className="block text-xs font-semibold uppercase tracking-wider text-ink/70">
-            Role
-          </label>
-          <select
-            id="role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink outline-none focus:border-navy"
-          >
-            <option value="patient">Patient / Citizen</option>
-            <option value="dispatcher">Dispatcher</option>
-            <option value="hospital">Hospital ER Staff</option>
-            <option value="driver">Ambulance Driver</option>
-            <option value="operator">Fleet Operator</option>
-            <option value="caregiver">Caregiver</option>
-          </select>
+          <label htmlFor="password" className="block text-xs font-semibold text-ink/70">Password</label>
+          <input id="password" type="password" required autoComplete="current-password"
+            value={password} onChange={(e) => setPassword(e.target.value)}
+            className="mt-1.5 w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm" />
         </div>
 
         <button
@@ -112,9 +102,10 @@ export default function Login() {
 
       <div className="mt-8 border-t border-line/60 pt-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-ink/50">
-          Quick demo sign-in
+          Demo accounts — choose a role to sign in
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <p className="mt-2 text-sm text-ink/70">Password for every demo account <code>SahayDemo123!</code></p>
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {DEMO_ACCOUNTS.map((acc) => (
             <button
               key={acc.role}
@@ -124,7 +115,7 @@ export default function Login() {
               className="rounded-lg border border-line bg-white/80 px-2.5 py-2 text-left text-xs font-medium text-navy transition hover:border-navy hover:bg-white"
             >
               <div className="font-semibold">{acc.label}</div>
-              <div className="text-[10px] text-ink/50 truncate">{acc.email.split("@")[0]}</div>
+              <div className="text-xs text-ink/60 break-all">{acc.email}</div>
             </button>
           ))}
         </div>

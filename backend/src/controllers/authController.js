@@ -3,32 +3,25 @@ const { signAccessToken, signRefreshToken, verifyRefreshToken } = require("../ut
 
 /**
  * POST /api/auth/login
- * Body: { email, role, name }
- * Directly signs in or creates account without external OAuth dependency,
+ * Body: { email, password }
+ * Verifies the saved password and account role,
  * then issues access JWT and sets refresh cookie.
  */
 async function login(req, res) {
   try {
-    const { email, role, name } = req.body;
-    if (!email || typeof email !== "string") {
-      return res.status(400).json({ message: "Email is required" });
+    const { email, password } = req.body;
+    if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
     }
-
     const cleanEmail = email.trim().toLowerCase();
-    let user = await User.findOne({ email: cleanEmail });
-
-    if (!user) {
-      user = await User.create({
-        name: name || cleanEmail.split("@")[0],
-        email: cleanEmail,
-        role: role || "patient",
-        isActive: true,
-      });
-    } else if (role && user.role !== role) {
-      // Allow demo / role switching if user requests a specific role
-      user.role = role;
-      await user.save();
+    const credentials = await require("../data/prisma").user.findUnique({
+      where: { email: cleanEmail },
+      select: { passwordHash: true },
+    });
+    if (!credentials?.passwordHash || !await require("bcryptjs").compare(password, credentials.passwordHash)) {
+      return res.status(401).json({ message: "Invalid email or password" });
     }
+    const user = await User.findOne({ email: cleanEmail });
 
     if (!user.isActive) {
       return res.status(401).json({ message: "Account is inactive" });

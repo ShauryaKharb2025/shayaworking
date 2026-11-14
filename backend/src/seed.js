@@ -280,6 +280,16 @@ async function seed() {
     { upsert: true }
   );
 
+  const passwordHash = await require("bcryptjs").hash("SahayDemo123!", 12);
+  for (const role of ["clinician", "caregiver", "admin"]) {
+    await User.findOneAndUpdate(
+      { email: role + "@sahay.org" },
+      { email: role + "@sahay.org", name: "Demo " + role, role, isActive: true },
+      { upsert: true }
+    );
+  }
+
+
   console.log("[seed] Seeding 10 ambulances with dedicated certified drivers...");
   const seededAmbulances = [];
   for (const a of AMBULANCES) {
@@ -341,6 +351,13 @@ async function seed() {
   console.log(
     `[seed] Successfully seeded ${seededAmbulances.length} ambulances and ${seededHospitals.length} hospitals!`
   );
+  for (const email of [
+    "patient@sahay.org", "dispatcher@sahay.org", "hospital@sahay.org",
+    "operator@sewa-ambulance.org", "driver.ramesh@sahay.local",
+    "clinician@sahay.org", "caregiver@sahay.org", "admin@sahay.org",
+  ]) {
+    await require("./data/prisma").user.update({ where: { email }, data: { passwordHash } });
+  }
   process.exit(0);
 }
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import AppShell from "./components/AppShell";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -14,22 +14,25 @@ const PatientDashboard = lazy(() => import("./pages/PatientDashboard"));
 const OperatorDashboard = lazy(() => import("./pages/OperatorDashboard"));
 import PatientSOS from "./pages/PatientSOS";
 import { CaregiverDashboard, ClinicianDashboard } from "./components/CaseWorkflow";
-import RolePreview from "./pages/RolePreview";
+import { roleHome } from "./utils/roles";
 import "./styles/dashboard.css";
-function RolePage({role,roles,children}) {
- const {user}=useAuth();
- return user?<ProtectedRoute roles={roles}><div className="sahay-legacy">{children}</div></ProtectedRoute>:<RolePreview role={role}/>;
+function RolePage({ roles, children }) {
+ return <ProtectedRoute roles={roles}><div className="sahay-legacy">{children}</div></ProtectedRoute>;
 }
 const Legacy=({children})=><div className="sahay-legacy">{children}</div>;
 export default function App() {
+ const { user } = useAuth();
+ const location = useLocation();
+ if (!user && location.pathname !== "/login") return <Navigate to="/login" replace />;
+
  return <AppShell><Suspense fallback={<div className="sahay-workspace" role="status">Loading workspace…</div>}><Routes>
-  <Route path="/" element={<PatientSOS/>}/>
-  <Route path="/patient" element={<PatientSOS/>}/>
-  <Route path="/sos" element={<PatientSOS/>}/>
+  <Route path="/" element={<Navigate to={user ? roleHome(user.role) : "/login"} replace />}/>
+  <Route path="/patient" element={<ProtectedRoute roles={["patient","caregiver"]}><PatientSOS/></ProtectedRoute>}/>
+  <Route path="/sos" element={<ProtectedRoute roles={["patient","caregiver"]}><PatientSOS/></ProtectedRoute>}/>
   <Route path="/trip/:id" element={<ProtectedRoute><PatientSOS/></ProtectedRoute>}/>
   <Route path="/trip/:id/details" element={<ProtectedRoute><Legacy><TripTrack/></Legacy></ProtectedRoute>}/>
   <Route path="/patient/history" element={<ProtectedRoute roles={["patient","caregiver"]}><Legacy><PatientDashboard/></Legacy></ProtectedRoute>}/>
-  <Route path="/login" element={<Legacy><Login/></Legacy>}/>
+  <Route path="/login" element={user ? <Navigate to={roleHome(user.role)} replace /> : <Legacy><Login/></Legacy>}/>
   <Route path="/how-it-works" element={<Legacy><Home/></Legacy>}/>
   <Route path="/coverage" element={<Legacy><CoverageMap/></Legacy>}/>
   <Route path="/dispatcher" element={<RolePage role="dispatcher" roles={["dispatcher","admin"]}><DispatcherDashboard/></RolePage>}/>

@@ -39,6 +39,7 @@ before(async () => {
 });
 after(async () => {
  server?.kill();
+ await prisma.hospitalReferral.deleteMany({where:{trip:{patientId:{in:ids.users}}}});
  await prisma.trip.deleteMany({where:{patientId:{in:ids.users}}});
  await prisma.ambulance.deleteMany({where:{id:{in:ids.ambulances}}});
  await prisma.user.deleteMany({where:{id:{in:ids.users}}});

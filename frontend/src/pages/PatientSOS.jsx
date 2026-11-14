@@ -1,0 +1,97 @@
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
+import JourneyMap from "../components/JourneyMap";
+import { Ambulance, ArrowRight, Building2, Check, CheckCircle2, ChevronRight, ClipboardList, Clock3, HeartPulse, LocateFixed, MapPin, Pill, ShieldCheck, Users } from "../components/Icons";
+const statusLabels={requested:"Awaiting dispatcher",waitlisted:"Outside current coverage",matched:"Ambulance matched",dispatched:"Ambulance dispatched",en_route:"Ambulance en route",arrived_pickup:"Arrived at pickup",en_route_hospital:"Travelling to hospital",handed_off:"Handoff complete",cancelled:"Request cancelled"};
+export default function PatientSOS() {
+ const {user}=useAuth(), navigate=useNavigate(),{id}=useParams();
+ const preview=!user;
+ const canRequest=!user || ["patient","caregiver"].includes(user.role);
+ const [trip,setTrip]=useState(null),[loading,setLoading]=useState(!!user),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+ const [address,setAddress]=useState(preview?"Patel Nagar, Delhi":""),[symptoms,setSymptoms]=useState(preview?"Severe chest pain, breathlessness, possible cardiac.":""),[needs,setNeeds]=useState("ALS"),[pickup,setPickup]=useState(null),[medical,setMedical]=useState(false);
+ const updatePickup=useCallback(p=>setPickup(p),[]);
+ const load=useCallback(async()=>{
+  if(!user || !canRequest){setLoading(false);return}
+  try {
+   let selected;
+   if(id) selected=(await api.get("/sos/"+id)).data.trip;
+   else {
+    const rows=(await api.get("/sos")).data.trips||[];
+    selected=rows.find(t=>!["handed_off","cancelled"].includes(t.status));
+    if(selected)selected=(await api.get("/sos/"+selected._id)).data.trip;
+   }
+   setTrip(selected||null);setError("");
+  }catch(e){setError(e.response?.data?.message||"Could not refresh your case. Showing the last received information.");}
+  finally{setLoading(false)}
+ },[user,id]);
+ useEffect(()=>{load();if(!user)return;const interval=setInterval(load,10000);return()=>clearInterval(interval)},[load,user]);
+ function locate(){
+  if(!navigator.geolocation){setError("Location sharing is unavailable. Drag the map pin to select pickup.");return}
+  setBusy(true);
+  navigator.geolocation.getCurrentPosition(pos=>{setPickup({lat:pos.coords.latitude,lng:pos.coords.longitude});setBusy(false);setError("")},()=>{setError("Location access was denied. Drag the map pin to choose pickup.");setBusy(false)},{timeout:10000});
+ }
+ async function submit(e){
+  e.preventDefault();if(preview){navigate("/login");return}
+  if(!pickup){setError("Share your location or drag the pickup pin before sending SOS.");return}
+  if(!symptoms.trim()){setError("Describe the symptoms or reason for this request.");return}
+  setBusy(true);setError("");
+  try{
+   const {data}=await api.post("/sos",{...pickup,address,channel:"app",symptoms:[symptoms.trim()],requestedAmbulanceTier:needs});
+   setTrip(data.trip);navigate("/trip/"+data.trip._id);
+  }catch(e){setError(e.response?.data?.message||"Could not send SOS. Please try again or call 112.");}
+  finally{setBusy(false)}
+ }
+ const ambulance=trip?.ambulance,hospital=trip?.hospital;
+ const stage=preview?2:({requested:0,matched:1,dispatched:1,en_route:2,arrived_pickup:2,en_route_hospital:3,handed_off:4}[trip?.status]??-1);
+ const timeline=[
+  ["SOS Received",preview?"Cardiac emergency (ALS)":trip?trip.address||"Emergency request received":"Your request will appear here",trip?.createdAt],
+  ["Ambulance Assigned",preview?"ALS-03 · Crew: Paramedic + EMT":ambulance?.vehicleNumber||"Awaiting dispatcher assignment",trip?.dispatchedAt],
+  ["Ambulance En Route",preview?"ETA: 6 min · 2.4 km":trip?.etaMinutes?("Estimated pickup: "+trip.etaMinutes+" min"):"ETA not yet available",null],
+  [preview?"Hospital Confirmed (H4)":"Hospital destination",preview?"AIIMS · Cardiac Care · Sample readiness":hospital?.name?hospital.name+" · acceptance not recorded":"Awaiting hospital selection",null],
+  ["Patient Handoff",preview?"At hospital (after arrival)":trip?.handedOffAt?"Handoff recorded":"Pending hospital arrival and handoff",trip?.handedOffAt]
+ ];
+ const time=value=>value?new Date(value).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):"Pending";
+ return <div className="js-workspace">
+  <div className="js-page-heading"><div className="js-hello-icon"><HeartPulse/></div><div><h1>{trip?"Your care journey":"Hi, Need help?"}</h1><p>Request a verified, equipped ambulance in seconds.</p></div><span className={"js-mode "+(preview?"":"connected")}>{preview?"Interactive design preview":"Connected to your account"}</span></div>
+  {preview&&<div className="js-preview-note">Sample case and positions for exploring the design. <Link to="/login">Sign in to request an ambulance <ArrowRight size={14}/></Link></div>}
+  {error&&<div className="js-alert" role="alert">{error}<button onClick={()=>setError("")} aria-label="Dismiss error">×</button></div>}
+  <div className="js-dashboard-grid">
+   <div className="js-primary">
+    <div className="js-service-grid">
+     <button className={"js-service sos "+(!medical?"selected":"")} onClick={()=>setMedical(false)}><Ambulance/><span><strong>Medical Emergency (SOS)</strong><small>Accident · Cardiac · Breathing · Serious Injury</small></span><ChevronRight/></button>
+     <button className={"js-service medicine "+(medical?"selected":"")} onClick={()=>setMedical(true)}><Pill/><span><strong>Medicine / Medical Help</strong><small>Non-emergency medical assistance</small></span><ChevronRight/></button>
+    </div>
+    {medical&&<div className="js-medical-note"><Pill/><div><strong>Non-emergency assistance</strong><p>Medicine delivery and consultations are not available in this prototype. Contact your care provider for non-emergency help.</p></div><button onClick={()=>setMedical(false)}>Return to SOS</button></div>}
+    <div className="js-stepper">{["Share Location","Describe Symptoms","Confirm Ambulance"].map((label,i)=><div key={label}><span className={(i===2?"current":"")}>{i+1}</span><strong>{label}</strong>{(preview|| (i===0&&pickup) || (i===1&&symptoms.trim()))&&i<2&&<CheckCircle2 className="js-green" size={18}/>}</div>)}</div>
+    <div className="js-incident-map">
+     <form className="js-card js-incident" onSubmit={submit}>
+      <h2><ClipboardList/> Incident Details</h2>
+      <label>Location (Pickup)<div className="js-input-icon"><MapPin size={19}/><input aria-label="Pickup address" value={trip?.address||address} disabled={!!trip} placeholder="Address or landmark" onChange={e=>setAddress(e.target.value)}/><button type="button" disabled={busy||!!trip} onClick={locate} aria-label="Use my current location"><LocateFixed size={19}/></button></div></label>
+      {pickup&&<span className="js-coordinates">{pickup.lat.toFixed(4)}, {pickup.lng.toFixed(4)} · pickup selected</span>}
+      <label>Symptoms / Reason <b className="js-red">*</b><textarea value={trip?(trip.symptoms?.join(", ")||trip.triage?.notes||"No symptom description recorded."):symptoms} onChange={e=>setSymptoms(e.target.value)} placeholder="Describe what happened…" rows={3} disabled={!!trip}/></label>
+      <fieldset disabled={!!trip}><legend>Requested ambulance type</legend><div className="js-type-options">{["ALS","BLS"].map(type=><label key={type} className={(trip?.requestedAmbulanceTier||needs)===type?"checked":""}><input type="radio" name="ambulanceType" checked={(trip?.requestedAmbulanceTier||needs)===type} onChange={()=>setNeeds(type)}/>{type} ({type==="ALS"?"Advanced":"Basic"})</label>)}</div></fieldset>
+      <p className="js-field-help">{trip?"Vehicle allocation and equipment are confirmed by dispatch.":"Preference for review. Dispatch determines the required vehicle and equipment."}</p>
+      <button className="js-button dark js-confirm" type="submit" disabled={busy||!!trip||medical||!canRequest}>{!canRequest?"Patient account required":busy?"Please wait…":trip?"SOS request received":"Confirm & Send SOS"} {!trip&&<ArrowRight size={20}/>}</button>
+      {trip&&<><Link to={"/trip/"+trip._id+"/details"} className="js-subtle-link">Trip controls &amp; messages →</Link><Link to="/patient/history" className="js-subtle-link">View your trip history</Link></>}
+     </form>
+     <JourneyMap preview={preview} trip={trip} pickup={pickup} onPickup={updatePickup}/>
+    </div>
+   </div>
+   <aside className="js-case-column">
+    <section className="js-card js-case-summary"><div><div><span className="js-muted">Case ID</span><h2>{preview?"JS-CARD-001":trip?trip._id.slice(0,13).toUpperCase():loading?"Loading…":"No active case"}</h2></div><span className="js-case-badge"><HeartPulse size={20}/>{preview?"ALS (Cardiac)":ambulance?.tier||"SOS"}</span></div><div className={"js-status "+(trip?.status==="cancelled"?"cancelled":"")}><span>i</span><b>Status:</b> {preview?"Ambulance En Route":loading?"Loading case…":statusLabels[trip?.status]||"Ready when you need help"}</div></section>
+    <section className="js-card js-timeline"><h2><ClipboardList/> Response Timeline</h2><ol>{timeline.map(([title,description,at],i)=><li key={title} className={i<stage?"complete":i===stage?"current":""}><span className="js-timeline-node">{i<stage?<Check size={14}/>:null}</span><div><div><strong>{title}</strong><time>{preview?(i===0?"10:24 AM":i===1?"10:26 AM":i===2?"10:27 AM":"Pending"):time(at)}</time></div><p>{description}</p></div></li>)}</ol>{!preview&&<p className="js-timeline-foot">Updates refresh every 10 seconds. Pending milestones are not confirmations.</p>}</section>
+   </aside>
+  </div>
+  <div className="js-summary-grid">
+   <Summary icon={Ambulance} label="Ambulance" value={preview?"ALS-03":ambulance?.vehicleNumber||"Awaiting assignment"}/>
+   <Summary icon={Users} label="Crew" value={preview?"Paramedic + EMT":ambulance?.crew?.map(c=>c.role+(c.certified?" ✓":"")).join(" + ")||"Not yet recorded"}/>
+   <Summary icon={ClipboardList} label={preview?"Equipment (Sample verified)":ambulance?.complianceVerified?"Equipment · compliance verified":"Equipment"} value={preview?"Ventilator · Defibrillator · ECG · Oxygen":ambulance?.equipment?.join(" · ")||"Not yet recorded"} small/>
+   <Summary icon={Building2} label={preview?"Hospital (Sample confirmed)":"Hospital destination"} value={preview?"H4 – AIIMS":hospital?.name||"Awaiting selection"}/>
+   <Summary icon={Clock3} label={preview?"Sample ETA":"Estimated arrival"} value={preview?"6 min":trip?.etaMinutes?trip.etaMinutes+" min":"Not available"}/>
+  </div>
+  <footer className="js-workspace-footer"><span><ShieldCheck size={15}/> Synthetic prototype · call <a href="tel:112">112</a> for emergency assistance</span><span>{preview?"Preview data only":trip?.ambulance?.lastPingAt?"GPS last seen "+time(trip.ambulance.lastPingAt):"GPS timestamp not available"}</span></footer>
+ </div>
+}
+function Summary({icon:Icon,label,value,small}){return <section className="js-card js-summary"><Icon/><div><span>{label}</span><strong className={small?"small":""}>{value}</strong></div></section>}

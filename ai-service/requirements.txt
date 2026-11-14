@@ -1,0 +1,8 @@
+flask==3.0.3
+flask-cors==4.0.1
+python-dotenv==1.0.1
+gunicorn==22.0.0
+# 👉 If you plug in a real ML model later (e.g. scikit-learn, a fine-tuned classifier,
+# or a call out to an LLM API for symptom triage), add those packages here, e.g.:
+# scikit-learn==1.5.1
+# openai==1.40.0

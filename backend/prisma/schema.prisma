@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(uuid())
+  name String
+  email String @unique
+  avatar String?
+  googleId String? @unique
+  passwordHash String?
+  role String @default("patient")
+  phone String?
+  preferredLanguage String @default("en")
+  operatorId String?
+  operator Operator? @relation(fields: [operatorId], references: [id])
+  hospitalId String?
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+  caregiverFor String[] @default([])
+  medicalProfile Json @default("{}")
+  isActive Boolean @default(true)
+  ambulances Ambulance[]
+  trips Trip[] @relation("PatientTrips")
+  triggeredTrips Trip[] @relation("TriggeredTrips")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+}
+model Operator {
+  id String @id @default(uuid())
+  name String @unique
+  type String
+  contactEmail String?
+  contactPhone String?
+  verified Boolean @default(false)
+  verificationDocs String[] @default([])
+  city String?
+  slaMinutes Int @default(15)
+  ambulances Ambulance[]
+  users User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+}
+model Ambulance {
+  id String @id @default(uuid())
+  vehicleNumber String @unique
+  operatorId String
+  operator Operator @relation(fields: [operatorId], references: [id])
+  tier String @default("BLS")
+  equipment String[] @default([])
+  crew Json @default("[]")
+  driverId String?
+  driver User? @relation(fields: [driverId], references: [id])
+  status String @default("offline")
+  location Json @default("{\"type\":\"Point\",\"coordinates\":[0,0]}")
+  heading Float?
+  lastPingAt DateTime?
+  complianceVerified Boolean @default(false)
+  trips Trip[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+  @@index([status])
+  @@index([driverId])
+}
+model Hospital {
+  id String @id @default(uuid())
+  name String @unique
+  address String?
+  location Json @default("{\"type\":\"Point\",\"coordinates\":[0,0]}")
+  specialties String[] @default([])
+  bedsAvailable Int @default(0)
+  erContact String?
+  users User[]
+  trips Trip[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+}
+model CoverageZone {
+  id String @id @default(uuid())
+  name String @unique
+  pincode String?
+  center Json @default("{\"type\":\"Point\",\"coordinates\":[0,0]}")
+  radiusKm Float @default(10)
+  status String @default("coming_soon")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+}
+model Trip {
+  id String @id @default(uuid())
+  patientId String
+  patient User @relation("PatientTrips", fields: [patientId], references: [id])
+  triggeredById String?
+  triggeredBy User? @relation("TriggeredTrips", fields: [triggeredById], references: [id])
+  channel String @default("app")
+  symptoms String[] @default([])
+  requestedAmbulanceTier String?
+  pickupLocation Json
+  address String?
+  triage Json @default("{}")
+  status String @default("requested")
+  coverageState String @default("live")
+  ambulanceId String?
+  ambulance Ambulance? @relation(fields: [ambulanceId], references: [id])
+  hospitalId String?
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+  etaMinutes Float?
+  dispatchedAt DateTime?
+  autoDispatchAt DateTime?
+  arrivedPickupAt DateTime?
+  handedOffAt DateTime?
+  events Json @default("[]")
+  messages Json @default("[]")
+  fallbackChannelUsed String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+  @@index([patientId, createdAt])
+  @@index([status, autoDispatchAt])
+  @@index([hospitalId])
+}
+model WaitlistEntry {
+  id String @id @default(uuid())
+  pincodeOrArea String
+  language String @default("en")
+  contactPreference String @default("sms")
+  contact String
+  consented Boolean
+  location Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version Int @default(0)
+  @@index([pincodeOrArea])
+}

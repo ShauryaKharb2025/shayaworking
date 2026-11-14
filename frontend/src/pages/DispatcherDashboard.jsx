@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { connectSocket } from "../api/socket";
+import DispatchIntelligence from "../components/DispatchIntelligence";
 import GoogleMap from "../components/GoogleMap";
 
 export default function DispatcherDashboard() {
@@ -55,11 +56,15 @@ export default function DispatcherDashboard() {
     }
 
     socket.on("fleet:update", handleFleetUpdate);
+    socket.on("dispatch:new", handleTripUpdate);
+    socket.on("case:refresh", loadData);
     socket.on("trip:assigned", handleTripUpdate);
     socket.on("trip:status", handleTripUpdate);
 
     return () => {
       socket.off("fleet:update", handleFleetUpdate);
+      socket.off("dispatch:new", handleTripUpdate);
+      socket.off("case:refresh", loadData);
       socket.off("trip:assigned", handleTripUpdate);
       socket.off("trip:status", handleTripUpdate);
     };
@@ -416,6 +421,8 @@ export default function DispatcherDashboard() {
           {error}
         </div>
       )}
+
+      <DispatchIntelligence trips={trips} />
 
       {/* Fleet summary */}
 

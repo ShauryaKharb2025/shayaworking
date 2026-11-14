@@ -1,3 +1,4 @@
+const prisma = require("../data/prisma");
 const Trip = require("../models/Trip");
 const Ambulance = require("../models/Ambulance");
 const {
@@ -48,7 +49,7 @@ async function canJoinTrip(
 
   if (
     socket.user.role === "driver" &&
-    trip.ambulance
+    trip.ambulance && !["cancelled", "handed_off"].includes(trip.status)
   ) {
     const ambulance =
       await Ambulance.findById(
@@ -82,7 +83,7 @@ function initSockets(io) {
    */
 
   io.use(
-    (socket, next) => {
+    async (socket, next) => {
       try {
         const token =
           socket.handshake.auth?.token;
@@ -99,6 +100,15 @@ function initSockets(io) {
 
         socket.user =
           verifyAccessToken(token);
+        const account = await prisma.user.findUnique({ where: { id: socket.user.sub } });
+        if (!account?.isActive || account.role !== socket.user.role) {
+          socket.user = null;
+        } else {
+          socket.account = account;
+          const remaining = Math.max(0, socket.user.exp * 1000 - Date.now());
+          const expiry = setTimeout(() => socket.disconnect(true), Math.min(remaining, 2_147_483_647));
+          socket.once("disconnect", () => clearTimeout(expiry));
+        }
 
         next();
       } catch (err) {
@@ -117,6 +127,13 @@ function initSockets(io) {
   io.on(
     "connection",
     (socket) => {
+      socket.on("leave:trip", tripId => socket.leave(`trip:${tripId}`));
+      if (socket.user?.role === "driver") socket.join(`driver:${socket.user.sub}`);
+      if (["dispatcher", "admin"].includes(socket.user?.role)) socket.join("dispatcher");
+      if (socket.user?.role === "hospital" && socket.account.hospitalId) {
+        socket.join(`hospital:${socket.account.hospitalId}`);
+      }
+
       /*
        * ==========================
        * TRIP ROOM
@@ -337,18 +354,9 @@ function initSockets(io) {
       socket.on(
         "join:hospital",
         (hospitalId) => {
-          if (
-            socket.user &&
-            [
-              "hospital",
-              "admin",
-            ].includes(
-              socket.user.role
-            )
-          ) {
-            socket.join(
-              `hospital:${hospitalId}`
-            );
+          if (socket.user?.role === "admin" ||
+              (socket.user?.role === "hospital" && socket.account.hospitalId === hospitalId)) {
+            socket.join(`hospital:${hospitalId}`);
           }
         }
       );

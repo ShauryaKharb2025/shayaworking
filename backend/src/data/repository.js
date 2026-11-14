@@ -155,4 +155,4 @@ async function transaction(fn) {
   return prisma.$transaction(tx => context.run(tx, fn));
 }
 for (const model of Object.keys(definitions)) repository(model);
-module.exports = { repository, transaction };
+module.exports = { repository, transaction, client };

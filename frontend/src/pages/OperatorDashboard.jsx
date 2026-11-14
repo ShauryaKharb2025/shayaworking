@@ -1,7 +1,59 @@
+import { useCaseResource } from "../components/CaseWorkflow";
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import StatusPill from "../components/StatusPill";
+
+function VehicleRecord({ ambulance, onSaved }) {
+  const [opened, setOpened] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [equipment, setEquipment] = useState(ambulance.equipment.join(", "));
+  const [crew, setCrew] = useState(ambulance.crew.map(row => row.name + " / " + row.role).join("\n"));
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const resource = useCaseResource(opened ? `/ambulances/${ambulance._id}/operations` : null, 8000);
+  async function update(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const rows = crew.split("\n").map(row => row.trim()).filter(Boolean);
+      const members = rows.map(row => {
+        const [name, role] = row.split("/").map(value => value.trim());
+        if (!name || !role) throw new Error("Enter each crew member as Name / Qualification.");
+        return { name, role };
+      });
+      const { data } = await api.patch("/ambulances/" + ambulance._id, {
+        equipment: equipment.split(",").map(value => value.trim()).filter(Boolean), crew: members,
+      });
+      onSaved(data.ambulance);
+      setEditing(false);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || "Could not update vehicle records.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return <div className="mt-3 space-y-2">
+    <button type="button" onClick={() => setOpened(!opened)}>{opened ? "Hide operations" : "View operations"}</button>
+    {["idle", "offline"].includes(ambulance.status) && <button type="button" onClick={() => setEditing(!editing)}>
+      {editing ? "Close equipment and crew" : "Edit equipment and crew"}
+    </button>}
+    {(resource.error || error) && <p role="alert">{resource.error || error}</p>}
+    {editing && <form onSubmit={update} className="grid gap-2">
+      <label>Equipment <input value={equipment} onChange={event => setEquipment(event.target.value)} /></label>
+      <label>Crew, one Name / Qualification per line <textarea value={crew} onChange={event => setCrew(event.target.value)} /></label>
+      <p>Changes require renewed compliance verification.</p>
+      <button disabled={saving}>Save vehicle records</button>
+    </form>}
+    {opened && !resource.data && !resource.error && <p role="status">Loading operations…</p>}
+    {opened && resource.data?.trips.length === 0 && <p>No trip assignments recorded.</p>}
+    {opened && resource.data?.trips.map(trip => <div key={trip.id}>
+      <p>Case {trip.id} · {trip.status.replaceAll("_", " ")}</p>
+      <ul>{trip.events.map((event, index) => <li key={index}>{event.type} · {new Date(event.at).toLocaleString()}</li>)}</ul>
+    </div>)}
+  </div>;
+}
 
 export default function OperatorDashboard() {
   const { user } = useAuth();
@@ -17,7 +69,6 @@ export default function OperatorDashboard() {
     equipment: "",
     driverName: "",
     paramedicName: "",
-    complianceVerified: false,
   });
 
   const loadAmbulances = async () => {
@@ -100,7 +151,6 @@ export default function OperatorDashboard() {
         tier: form.tier,
         equipment,
         crew,
-        complianceVerified: form.complianceVerified,
       });
 
       setAmbulances((prev) => [data.ambulance, ...prev]);
@@ -111,8 +161,7 @@ export default function OperatorDashboard() {
         equipment: "",
         driverName: "",
         paramedicName: "",
-        complianceVerified: false,
-      });
+          });
 
       setMessage("Ambulance successfully onboarded.");
     } catch (err) {
@@ -249,29 +298,7 @@ export default function OperatorDashboard() {
               />
             </div>
 
-            <label className="flex items-start gap-3 rounded-lg border border-line p-3">
-              <input
-                type="checkbox"
-                checked={form.complianceVerified}
-                onChange={(e) =>
-                  updateForm(
-                    "complianceVerified",
-                    e.target.checked
-                  )
-                }
-                className="mt-1 accent-navy"
-              />
 
-              <span>
-                <span className="block text-sm font-medium text-ink">
-                  Compliance verified
-                </span>
-
-                <span className="mt-1 block text-xs text-ink/50">
-                  AIS-125 / Form 22-A documentation verified.
-                </span>
-              </span>
-            </label>
 
             {message && (
               <div className="rounded-lg bg-paper px-4 py-3 text-sm text-ink/70">
@@ -352,6 +379,15 @@ export default function OperatorDashboard() {
                     </div>
 
                     <StatusPill status={ambulance.status} />
+                    {["idle", "offline"].includes(ambulance.status) && <button type="button" onClick={async () => {
+                      try {
+                        const status = ambulance.status === "idle" ? "offline" : "idle";
+                        const { data } = await api.patch("/ambulances/" + ambulance._id, { status });
+                        setAmbulances(rows => rows.map(row => row._id === ambulance._id ? data.ambulance : row));
+                      } catch (err) {
+                        setMessage(err.response?.data?.message || "Could not update availability.");
+                      }
+                    }}>{ambulance.status === "idle" ? "Take offline" : "Mark available"}</button>}
                   </div>
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -384,6 +420,8 @@ export default function OperatorDashboard() {
                       </p>
                     </div>
                   </div>
+                  <VehicleRecord ambulance={ambulance} onSaved={updated =>
+                    setAmbulances(rows => rows.map(row => row._id === updated._id ? updated : row))} />
                 </div>
               ))}
             </div>

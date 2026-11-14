@@ -18,3 +18,7 @@ export function connectSocket() {
   if (!s.connected) s.connect();
   return s;
 }
+
+export function disconnectSocket() {
+  socket?.disconnect();
+}

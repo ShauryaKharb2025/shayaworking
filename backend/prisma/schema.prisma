@@ -75,6 +75,8 @@ model Hospital {
   specialties String[] @default([])
   bedsAvailable Int @default(0)
   erContact String?
+  receivingReady Boolean @default(false)
+  referrals HospitalReferral[]
   users User[]
   trips Trip[]
   createdAt DateTime @default(now())
@@ -118,6 +120,9 @@ model Trip {
   events Json @default("[]")
   messages Json @default("[]")
   fallbackChannelUsed String?
+  referrals HospitalReferral[]
+  caregiverAccess CaregiverAccess[]
+  observations ClinicalObservation[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   version Int @default(0)
@@ -137,4 +142,40 @@ model WaitlistEntry {
   updatedAt DateTime @updatedAt
   version Int @default(0)
   @@index([pincodeOrArea])
+}
+
+model HospitalReferral {
+  id String @id @default(uuid())
+  tripId String
+  trip Trip @relation(fields: [tripId], references: [id])
+  hospitalId String
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+  status String @default("proposed")
+  createdAt DateTime @default(now())
+  @@index([tripId])
+  @@index([hospitalId, status])
+}
+
+model CaregiverAccess {
+  id String @id @default(uuid())
+  tripId String
+  trip Trip @relation(fields: [tripId], references: [id])
+  tokenHash String @unique
+  email String
+  userId String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  @@index([tripId, userId])
+}
+
+model ClinicalObservation {
+  id String @id @default(uuid())
+  tripId String
+  trip Trip @relation(fields: [tripId], references: [id])
+  actorId String
+  type String
+  note String
+  familyVisible Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@index([tripId, createdAt])
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
+import { HospitalReferrals } from "../components/CaseWorkflow";
 import { connectSocket } from "../api/socket";
 
 export default function HospitalConsole() {
@@ -8,6 +9,8 @@ export default function HospitalConsole() {
   const [trips, setTrips] = useState([]);
 
   // Bed availability
+  const [ready, setReady] = useState(false);
+  const [specialties, setSpecialties] = useState("");
   const [beds, setBeds] = useState(0);
   const [savingBeds, setSavingBeds] = useState(false);
   const [bedMessage, setBedMessage] = useState("");
@@ -17,11 +20,13 @@ export default function HospitalConsole() {
   useEffect(() => {
     if (!hospitalId) return;
 
-    // Existing incoming trips
-    api
+    function loadIncoming() {
+      return api
       .get(`/hospitals/${hospitalId}/incoming`)
       .then(({ data }) => setTrips(data.trips))
-      .catch((err) => console.error("Failed to load incoming trips:", err));
+      .catch((err) => setBedMessage(err.response?.data?.message || "Could not load incoming cases."));
+    }
+    loadIncoming();
 
     // Load current hospital bed availability
     api
@@ -33,6 +38,8 @@ export default function HospitalConsole() {
 
         if (hospital) {
           setBeds(hospital.bedsAvailable ?? 0);
+          setReady(hospital.receivingReady);
+          setSpecialties(hospital.specialties.join(", "));
         }
       })
       .catch((err) => console.error("Failed to load hospital:", err));
@@ -41,12 +48,12 @@ export default function HospitalConsole() {
 
     socket.emit("join:hospital", hospitalId);
 
-    socket.on("hospital:pre_alert", (p) =>
-      setTrips((prev) => [p.trip, ...prev])
-    );
+    socket.on("hospital:pre_alert", loadIncoming);
+    socket.on("case:refresh", loadIncoming);
 
     return () => {
-      socket.off("hospital:pre_alert");
+      socket.off("hospital:pre_alert", loadIncoming);
+      socket.off("case:refresh", loadIncoming);
     };
   }, [hospitalId]);
 
@@ -59,6 +66,8 @@ export default function HospitalConsole() {
 
       await api.patch(`/hospitals/${hospitalId}/beds`, {
         bedsAvailable: beds,
+        receivingReady: ready,
+        specialties: specialties.split(",").map(value => value.trim()).filter(Boolean),
       });
 
       setBedMessage("Bed availability updated successfully.");
@@ -86,6 +95,11 @@ export default function HospitalConsole() {
         Vitals, ETA and specialty need arrive before the ambulance does.
       </p>
 
+      {hospitalId && <>
+        <HospitalReferrals />
+        <label className="block"><input type="checkbox" checked={ready} onChange={event => setReady(event.target.checked)} /> Receiving team ready</label>
+        <label className="block">Specialties <input value={specialties} onChange={event => setSpecialties(event.target.value)} /></label>
+      </>}
       {!hospitalId && (
         <p className="mt-6 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
           Your account isn't linked to a hospital yet — an admin needs to set{" "}

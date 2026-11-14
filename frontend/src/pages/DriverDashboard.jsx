@@ -61,10 +61,12 @@ export default function DriverDashboard() {
     }
   };
 
+  socket.on("case:refresh", loadDriverData);
   socket.on("trip:assigned", handleTripAssigned);
   socket.on("trip:matched", handleTripMatched);
 
   return () => {
+    socket.off("case:refresh", loadDriverData);
     socket.off("trip:assigned", handleTripAssigned);
     socket.off("trip:matched", handleTripMatched);
 
@@ -177,6 +179,9 @@ useEffect(() => {
       /*
        * After handoff, ambulance becomes idle.
        */
+      if (status === "rejected") {
+        await loadDriverData();
+      }
       if (status === "handed_off") {
         setAmbulance((prev) =>
           prev
@@ -506,6 +511,12 @@ useEffect(() => {
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
+              {trip.status === "offered" && <>
+                <button disabled={updatingStatus} onClick={() => updateTripStatus("dispatched")}>Accept dispatch offer</button>
+                <button disabled={updatingStatus} onClick={() => updateTripStatus("rejected")}>Reject dispatch offer</button>
+              </>}
+              {trip.status === "arrived_pickup" && <button disabled={updatingStatus} onClick={() => updateTripStatus("picked_up")}>Confirm patient pickup</button>}
+              {trip.status === "picked_up" && !trip.hospital && <p>Waiting for a confirmed destination.</p>}
               {trip.status ===
                 "dispatched" && (
                 <button
@@ -541,7 +552,7 @@ useEffect(() => {
               )}
 
               {trip.status ===
-                "arrived_pickup" && (
+                "picked_up" && trip.hospital && (
                 <button
                   onClick={() =>
                     updateTripStatus(
@@ -562,7 +573,7 @@ useEffect(() => {
                 <button
                   onClick={() =>
                     updateTripStatus(
-                      "handed_off"
+                      "arrived_hospital"
                     )
                   }
                   disabled={
@@ -570,7 +581,7 @@ useEffect(() => {
                   }
                   className="rounded-full bg-navy px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 >
-                  ✅ Handoff complete
+                  Confirm arrival at hospital
                 </button>
               )}
             </div>

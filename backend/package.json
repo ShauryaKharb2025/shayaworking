@@ -16,6 +16,7 @@
     "db:postgis": "node scripts/enable-postgis.js"
   },
   "dependencies": {
+    "@google/genai": "^3.3.0",
     "@prisma/client": "^6.19.0",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",

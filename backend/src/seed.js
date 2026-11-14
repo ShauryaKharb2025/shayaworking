@@ -27,6 +27,7 @@ async function seed() {
       location: { type: "Point", coordinates: [85.1414, 25.6127] },
       specialties: ["trauma", "cardiology"],
       bedsAvailable: 4,
+      receivingReady: true,
       erContact: "+91-000-0000",
     },
     { upsert: true, new: true }

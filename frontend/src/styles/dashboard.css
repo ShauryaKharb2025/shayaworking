@@ -24,3 +24,7 @@
 .sahay-brand>.sahay-brand-lockup{width:205px;height:56px;object-fit:contain;display:block}
 @media(max-width:800px){.sahay-brand>.sahay-brand-lockup{width:162px;height:48px}}
 @media(max-width:380px){.sahay-brand>.sahay-brand-lockup{width:140px;height:44px}}
+
+.sahay-detect-btn{display:inline-flex!important;align-items:center;gap:6px;background:#eef4ff!important;color:#1e40af!important;font-size:12px;font-weight:600;padding:5px 10px!important;border-radius:7px;cursor:pointer;white-space:nowrap;border:1px solid #bfdbfe!important;transition:all .15s ease}
+.sahay-detect-btn:hover:not(:disabled){background:#dbeafe!important;color:#1d4ed8!important}
+.sahay-detect-btn:disabled{opacity:.6;cursor:not-allowed}

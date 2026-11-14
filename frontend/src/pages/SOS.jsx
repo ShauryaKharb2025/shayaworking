@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { detectLocation } from "../api/location";
 
 const SYMPTOM_CHIPS = [
   "chest pain", "difficulty breathing", "heavy bleeding", "unconscious",
@@ -20,18 +21,18 @@ export default function SOS() {
     setSymptoms((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   }
 
-  function locate() {
+  async function locate() {
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setLocating(false);
-      },
-      () => {
-        setError("Couldn't get your location — you can still type an address below.");
-        setLocating(false);
-      }
-    );
+    setError("");
+    try {
+      const loc = await detectLocation();
+      setCoords({ lat: loc.lat, lng: loc.lng });
+      if (loc.address) setAddress(loc.address);
+    } catch {
+      setError("Couldn't get your location — you can still type an address below.");
+    } finally {
+      setLocating(false);
+    }
   }
 
   async function sendSOS() {

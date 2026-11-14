@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { CaregiverInvitations, JourneyLog } from "../components/CaseWorkflow";
 import JourneyMap from "../components/JourneyMap";
 import { Ambulance, ArrowRight, Building2, Check, CheckCircle2, ChevronRight, ClipboardList, Clock3, HeartPulse, LocateFixed, MapPin, Pill, ShieldCheck, Users } from "../components/Icons";
+import { detectLocation, reverseGeocode } from "../api/location";
 const statusLabels={requested:"Finding an available ambulance",offered:"Awaiting driver acceptance",picked_up:"Patient picked up",arrived_hospital:"Arrived at hospital",waitlisted:"Outside current coverage",matched:"Ambulance matched",dispatched:"Ambulance dispatched",en_route:"Ambulance en route",arrived_pickup:"Arrived at pickup",en_route_hospital:"Travelling to hospital",handed_off:"Handoff complete",cancelled:"Request cancelled"};
 export default function PatientSOS() {
  const {user}=useAuth(), navigate=useNavigate(),{id}=useParams();
@@ -13,7 +14,11 @@ export default function PatientSOS() {
  const canRequest=!user || user.role==="patient";
  const [trip,setTrip]=useState(null),[loading,setLoading]=useState(!!user),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const [address,setAddress]=useState(preview?"Patel Nagar, Delhi":""),[symptoms,setSymptoms]=useState(preview?"Severe chest pain, breathlessness, possible cardiac.":""),[needs,setNeeds]=useState("ALS"),[pickup,setPickup]=useState(null),[medical,setMedical]=useState(false);
- const updatePickup=useCallback(p=>setPickup(p),[]);
+ const updatePickup=useCallback(async p=>{
+  setPickup(p);
+  const addr=await reverseGeocode(p.lat,p.lng);
+  if(addr)setAddress(addr);
+ },[]);
  const load=useCallback(async()=>{
   if(!user || !canRequest){setLoading(false);return}
   try {
@@ -44,10 +49,18 @@ export default function PatientSOS() {
    for (const name of ["case:refresh", "trip:status", "trip:location"]) socket.off(name, refresh);
   };
  }, [trip?._id, user, canRequest, load]);
- function locate(){
-  if(!navigator.geolocation){setError("Location sharing is unavailable. Drag the map pin to select pickup.");return}
-  setBusy(true);
-  navigator.geolocation.getCurrentPosition(pos=>{setPickup({lat:pos.coords.latitude,lng:pos.coords.longitude});setBusy(false);setError("")},()=>{setError("Location access was denied. Drag the map pin to choose pickup.");setBusy(false)},{timeout:10000});
+ async function locate(){
+  if(busy||!!trip)return;
+  setBusy(true);setError("");
+  try{
+   const loc=await detectLocation();
+   setPickup({lat:loc.lat,lng:loc.lng});
+   if(loc.address)setAddress(loc.address);
+  }catch(e){
+   setError(e.message||"Location sharing is unavailable. Drag the map pin to select pickup.");
+  }finally{
+   setBusy(false);
+  }
  }
  async function submit(e){
   e.preventDefault();if(preview){navigate("/login");return}
@@ -85,7 +98,7 @@ export default function PatientSOS() {
     <div className="sahay-incident-map">
      <form className="sahay-card sahay-incident" onSubmit={submit}>
       <h2><ClipboardList/> Incident Details</h2>
-      <label>Location (Pickup)<div className="sahay-input-icon"><MapPin size={19}/><input aria-label="Pickup address" value={trip?.address||address} disabled={!!trip} placeholder="Address or landmark" onChange={e=>setAddress(e.target.value)}/><button type="button" disabled={busy||!!trip} onClick={locate} aria-label="Use my current location"><LocateFixed size={19}/></button></div></label>
+      <label>Location (Pickup)<div className="sahay-input-icon"><MapPin size={19}/><input aria-label="Pickup address" value={trip?.address||address} disabled={!!trip} placeholder="Address or landmark" onChange={e=>setAddress(e.target.value)}/><button type="button" className="sahay-detect-btn" disabled={busy||!!trip} onClick={locate} aria-label="Detect location" title="Detect location"><LocateFixed size={16}/><span>{busy?"Detecting…":"Detect location"}</span></button></div></label>
       {pickup&&<span className="sahay-coordinates">{pickup.lat.toFixed(4)}, {pickup.lng.toFixed(4)} · pickup selected</span>}
       <label>Symptoms / Reason <b className="sahay-red">*</b><textarea value={trip?(trip.symptoms?.join(", ")||trip.triage?.notes||"No symptom description recorded."):symptoms} onChange={e=>setSymptoms(e.target.value)} placeholder="Describe what happened…" rows={3} disabled={!!trip}/></label>
       <fieldset disabled={!!trip}><legend>Requested ambulance type</legend><div className="sahay-type-options">{["ALS","BLS"].map(type=><label key={type} className={(trip?.requestedAmbulanceTier||needs)===type?"checked":""}><input type="radio" name="ambulanceType" checked={(trip?.requestedAmbulanceTier||needs)===type} onChange={()=>setNeeds(type)}/>{type} ({type==="ALS"?"Advanced":"Basic"})</label>)}</div></fieldset>

@@ -24,8 +24,8 @@ async function login(req, res) {
         role: role || "patient",
         isActive: true,
       });
-    } else if (role && user.role !== role) {
-      // Allow demo / role switching if user requests a specific role
+    } else if (role && user.role !== role && user.role === "patient") {
+      // Allow elevating a patient account if explicitly requested
       user.role = role;
       await user.save();
     }

@@ -188,13 +188,16 @@ async function getTrip(req, res, next) {
     const userId = String(req.user.sub);
     let allowed = ["dispatcher", "admin"].includes(req.user.role) || String(trip.patient) === userId;
     if (!allowed && req.user.role === "driver" && !["cancelled", "handed_off"].includes(trip.status)) {
-      allowed = String(trip.ambulance?.driver) === userId;
+      const driverId = trip.ambulance?.driver?._id || trip.ambulance?.driver;
+      allowed = String(driverId) === userId;
     }
     if (!allowed && ["hospital", "operator"].includes(req.user.role)) {
       const account = await require("../models/User").findById(userId);
+      const hospId = trip.hospital?._id || trip.hospital;
+      const opId = trip.ambulance?.operator?._id || trip.ambulance?.operator;
       allowed = req.user.role === "hospital"
-        ? !!account?.hospital && String(trip.hospital?._id) === String(account.hospital)
-        : !!account?.operator && String(trip.ambulance?.operator) === String(account.operator);
+        ? !!account?.hospital && String(hospId) === String(account.hospital)
+        : !!account?.operator && String(opId) === String(account.operator);
     }
     if (!allowed) return res.status(403).json({message:"You do not have access to this case."});
     const referral = await require("../data/prisma").hospitalReferral.findFirst({

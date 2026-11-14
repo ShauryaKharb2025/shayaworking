@@ -279,6 +279,16 @@ async function seed() {
     { name: "Sewa Trust Admin", email: "operator@sewa-ambulance.org", role: "operator", operator: operator._id, isActive: true },
     { upsert: true }
   );
+  await User.findOneAndUpdate(
+    { email: "clinician@sahay.org" },
+    { name: "Dr. Sunita Rao", email: "clinician@sahay.org", role: "clinician", hospital: seededHospitals[0]?._id, isActive: true },
+    { upsert: true }
+  );
+  await User.findOneAndUpdate(
+    { email: "caregiver@sahay.org" },
+    { name: "Meera Sharma", email: "caregiver@sahay.org", role: "caregiver", isActive: true },
+    { upsert: true }
+  );
 
   console.log("[seed] Seeding 10 ambulances with dedicated certified drivers...");
   const seededAmbulances = [];

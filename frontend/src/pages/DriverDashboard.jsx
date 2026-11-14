@@ -511,11 +511,33 @@ useEffect(() => {
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {trip.status === "offered" && <>
-                <button disabled={updatingStatus} onClick={() => updateTripStatus("dispatched")}>Accept dispatch offer</button>
-                <button disabled={updatingStatus} onClick={() => updateTripStatus("rejected")}>Reject dispatch offer</button>
-              </>}
-              {trip.status === "arrived_pickup" && <button disabled={updatingStatus} onClick={() => updateTripStatus("picked_up")}>Confirm patient pickup</button>}
+              {trip.status === "offered" && (
+                <>
+                  <button
+                    disabled={updatingStatus}
+                    onClick={() => updateTripStatus("dispatched")}
+                    className="rounded-full bg-navy px-4 py-2 text-xs font-semibold text-white hover:bg-navy-light disabled:opacity-50"
+                  >
+                    ✓ Accept dispatch offer
+                  </button>
+                  <button
+                    disabled={updatingStatus}
+                    onClick={() => updateTripStatus("rejected")}
+                    className="rounded-full border border-line px-4 py-2 text-xs font-semibold text-navy hover:border-signal-dark hover:text-signal-dark disabled:opacity-50"
+                  >
+                    ✕ Reject dispatch offer
+                  </button>
+                </>
+              )}
+              {trip.status === "arrived_pickup" && (
+                <button
+                  disabled={updatingStatus}
+                  onClick={() => updateTripStatus("picked_up")}
+                  className="rounded-full bg-navy px-4 py-2 text-xs font-semibold text-white hover:bg-navy-light disabled:opacity-50"
+                >
+                  Confirm patient pickup
+                </button>
+              )}
               {trip.status === "picked_up" && !trip.hospital && <p>Waiting for a confirmed destination.</p>}
               {trip.status ===
                 "dispatched" && (

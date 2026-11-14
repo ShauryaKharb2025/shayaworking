@@ -18,7 +18,8 @@ import RolePreview from "./pages/RolePreview";
 import "./styles/dashboard.css";
 function RolePage({role,roles,children}) {
  const {user}=useAuth();
- return user?<ProtectedRoute roles={roles}><div className="sahay-legacy">{children}</div></ProtectedRoute>:<RolePreview role={role}/>;
+ const authorized = user && (user.role === "admin" || !roles || roles.includes(user.role));
+ return authorized ? <div className="sahay-legacy">{children}</div> : <RolePreview role={role}/>;
 }
 const Legacy=({children})=><div className="sahay-legacy">{children}</div>;
 export default function App() {

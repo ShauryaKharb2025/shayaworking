@@ -17,8 +17,52 @@ export default function PatientSOS() {
  const [address,setAddress]=useState(""),[symptoms,setSymptoms]=useState(preview?"Cardiac Arrest / Acute Coronary Syndrome":""),[needs,setNeeds]=useState("ALS"),[pickup,setPickup]=useState(null),[medical,setMedical]=useState(false);
  const [selectedConditionId,setSelectedConditionId]=useState(preview?"cardiac-arrest":"");
  const [showFleet,setShowFleet]=useState(false);
+ const [hospitals,setHospitals]=useState([]);
+ const [selectedHospitalId,setSelectedHospitalId]=useState("");
  const currentCondition=CRITICAL_CONDITIONS.find(c=>c.id===selectedConditionId)||(preview?CRITICAL_CONDITIONS[0]:null);
  const assignedAmbulance=PREFETCHED_AMBULANCES.find(a=>currentCondition?a.tier===currentCondition.tier:true)||PREFETCHED_AMBULANCES[0];
+ const selectedHospital=hospitals.find(h=>(h._id||h.id)===selectedHospitalId)||hospitals[0];
+
+ useEffect(() => {
+  let ignore = false;
+  async function fetchNearestHospitals() {
+    try {
+      const params = {};
+      if (pickup?.lat && pickup?.lng) {
+        params.lat = pickup.lat;
+        params.lng = pickup.lng;
+      }
+      const cond = CRITICAL_CONDITIONS.find(c => c.id === selectedConditionId);
+      if (cond?.specialty) params.specialty = cond.specialty;
+      else if (symptoms?.trim()) params.symptoms = symptoms.trim();
+
+      const { data } = await api.get("/hospitals", { params });
+      if (!ignore && data.hospitals?.length) {
+        setHospitals(data.hospitals);
+        if (!selectedHospitalId || !data.hospitals.some(h => (h._id || h.id) === selectedHospitalId)) {
+          setSelectedHospitalId(data.hospitals[0]._id || data.hospitals[0].id);
+        }
+      }
+    } catch {
+      if (!ignore) {
+        const cond = CRITICAL_CONDITIONS.find(c => c.id === selectedConditionId);
+        const fallback = PREFETCHED_HOSPITALS.map(h => ({
+          _id: h.id,
+          id: h.id,
+          name: h.name,
+          specialties: [h.specialty],
+          bedsAvailable: h.beds,
+          distanceKm: cond?.hospitalName === h.name ? 2.4 : 5.8,
+          matchesSpecialty: cond?.hospitalName === h.name || (h.conditionId === selectedConditionId),
+        })).sort((a, b) => (b.matchesSpecialty ? 1 : 0) - (a.matchesSpecialty ? 1 : 0) || a.distanceKm - b.distanceKm);
+        setHospitals(fallback);
+        if (!selectedHospitalId) setSelectedHospitalId(fallback[0]?._id);
+      }
+    }
+  }
+  fetchNearestHospitals();
+  return () => { ignore = true; };
+ }, [pickup?.lat, pickup?.lng, selectedConditionId, symptoms]);
  function handleConditionChange(e){
   const condId=e.target.value;
   setSelectedConditionId(condId);
@@ -92,6 +136,7 @@ export default function PatientSOS() {
     requestedAmbulanceTier:needs,
     requiredSpecialties:condition?[condition.specialty]:[],
     requiredEquipment:condition?condition.equipment:[],
+    hospitalId: selectedHospitalId || undefined,
    });
    setTrip(data.trip);navigate("/trip/"+data.trip._id);
   }catch(e){setError(e.response?.data?.message||"Could not send SOS. Please try again or call 112.");}
@@ -113,7 +158,7 @@ export default function PatientSOS() {
   ["SOS Received",preview?(currentCondition?.name || "Cardiac emergency (ALS)"):trip?trip.address||"Emergency request received":"Your request will appear here",trip?.createdAt],
   ["Ambulance Assigned",preview?`${assignedAmbulance.vehicleNumber} (${assignedAmbulance.tier}) · Driver: ${assignedAmbulance.driver}`:ambulance?.vehicleNumber||"Awaiting dispatcher assignment",trip?.dispatchedAt],
   ["Ambulance En Route",preview?`ETA: ${assignedAmbulance.etaMinutes} min · ${assignedAmbulance.distanceKm} km`:trip?.etaMinutes?("Estimated pickup: "+trip.etaMinutes+" min"):"ETA not yet available",null],
-  [preview?"Hospital Confirmed":"Hospital destination",preview?`${currentCondition?.hospitalName || "AIIMS"} · ${currentCondition?.specialty || "Cardiac Care"}`:hospital?.name?hospital.name+" · confirmed":trip?.proposedHospital?.name?trip.proposedHospital.name+" · proposed":"Awaiting hospital selection",null],
+  [preview?"Hospital Confirmed":"Hospital destination",preview?`${currentCondition?.hospitalName || "AIIMS"} · ${currentCondition?.specialty || "Cardiac Care"}`:hospital?.name?hospital.name+" · confirmed":trip?.proposedHospital?.name?trip.proposedHospital.name+" · proposed":selectedHospital?.name?selectedHospital.name+" · selected destination":"Awaiting hospital selection",null],
   ["Patient Handoff",preview?"At hospital (after arrival)":trip?.handedOffAt?"Handoff recorded":"Pending hospital arrival and handoff",trip?.handedOffAt]
  ];
  const time=value=>value?new Date(value).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):"Pending";
@@ -140,10 +185,50 @@ export default function PatientSOS() {
         {CRITICAL_CONDITIONS.map(c=><option key={c.id} value={c.id}>{c.name} ({c.tier})</option>)}
        </select>
       </label>
-      {currentCondition&&<div className="sahay-equipped-badge">
-       <div className="sahay-equipped-row"><Building2 size={16}/><span>Equipped Hospital: <strong>{currentCondition.hospitalName}</strong> <small>({currentCondition.specialty})</small></span></div>
-       <div className="sahay-equipped-row"><Ambulance size={16}/><span>Pre-matched Unit: <strong>{assignedAmbulance.vehicleNumber} ({currentCondition.tier})</strong> · {currentCondition.equipment.slice(0,3).join(", ")}</span></div>
-      </div>}
+      {/* Destination Hospital Selection */}
+      <div className="sahay-equipped-badge" style={{ marginTop: "10px" }}>
+       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+        <div className="sahay-equipped-row">
+         <Building2 size={16}/>
+         <span>Destination Hospital: <strong>{trip?.hospital?.name || selectedHospital?.name || currentCondition?.hospitalName || "AIIMS Apex Heart Institute"}</strong></span>
+        </div>
+        {selectedHospital?.distanceKm !== undefined && (
+         <span style={{ fontSize: "11px", fontWeight: 700, color: "#166534", background: "#dcfce7", padding: "2px 8px", borderRadius: "9999px" }}>
+          ★ {selectedHospital.distanceKm} km away
+         </span>
+        )}
+       </div>
+       <div className="sahay-equipped-row">
+        <span>Specialty: <strong>{selectedHospital?.specialties?.join(", ") || selectedHospital?.specialty || currentCondition?.specialty || "Emergency Care"}</strong> · <strong>{selectedHospital?.bedsAvailable ?? selectedHospital?.beds ?? 8}</strong> beds ready</span>
+       </div>
+       {currentCondition && (
+        <div className="sahay-equipped-row">
+         <Ambulance size={16}/>
+         <span>Pre-matched Unit: <strong>{assignedAmbulance.vehicleNumber} ({currentCondition.tier})</strong> · {currentCondition.equipment.slice(0,3).join(", ")}</span>
+        </div>
+       )}
+       {!trip && hospitals.length > 0 && (
+        <div style={{ marginTop: "6px", borderTop: "1px solid #bfdbfe80", paddingTop: "6px" }}>
+         <label style={{ fontSize: "11px", fontWeight: 600, color: "#1e3a8a", display: "block", marginBottom: "4px" }}>
+          Choose hospital (ranked by symptom match &amp; distance):
+         </label>
+         <select
+          aria-label="Choose Hospital"
+          className="sahay-select"
+          style={{ margin: 0, padding: "6px 10px", fontSize: "12px", background: "#fff" }}
+          value={selectedHospitalId}
+          disabled={!!trip}
+          onChange={e => setSelectedHospitalId(e.target.value)}
+         >
+          {hospitals.map((h, i) => (
+           <option key={h._id || h.id} value={h._id || h.id}>
+            {i === 0 ? "★ [Nearest Equipped] " : ""}{h.name} {h.distanceKm ? `· ${h.distanceKm} km` : ""} ({h.specialties?.join(", ") || h.specialty || "ER"} · {h.bedsAvailable ?? h.beds ?? 0} beds)
+           </option>
+          ))}
+         </select>
+        </div>
+       )}
+      </div>
       <label>Symptoms / Additional Notes
        <textarea aria-label="Symptoms" value={trip?(trip.symptoms?.join(", ")||trip.triage?.notes||"No symptom description recorded."):symptoms} onChange={e=>setSymptoms(e.target.value)} placeholder="Select condition from dropdown above or enter notes…" rows={2} disabled={!!trip}/>
       </label>
@@ -203,7 +288,7 @@ export default function PatientSOS() {
    <Summary icon={Ambulance} label="Ambulance" value={trip?ambulance?.vehicleNumber||"Awaiting assignment":preview?`${assignedAmbulance.vehicleNumber} (${assignedAmbulance.tier})`:"Awaiting assignment"}/>
    <Summary icon={Users} label="Crew" value={preview?`Driver: ${assignedAmbulance.driver} · EMT (Certified)`:ambulance?.crew?.map(c=>c.role+(c.certified?" ✓":"")).join(" + ")||"Not yet recorded"}/>
    <Summary icon={ClipboardList} label={preview?"Equipment (Equipped for case)":ambulance?.complianceVerified?"Equipment · compliance verified":"Equipment"} value={preview?currentCondition?.equipment?.join(" · ")||"Ventilator · Defibrillator · ECG · Oxygen":ambulance?.equipment?.join(" · ")||"Not yet recorded"} small/>
-   <Summary icon={Building2} label={preview?"Equipped Hospital":hospital?.name||"Hospital destination"} value={preview?currentCondition?.hospitalName||"AIIMS Apex Heart Institute":hospital?.name||"Awaiting selection"}/>
+   <Summary icon={Building2} label={preview?"Equipped Hospital":hospital?.name||"Hospital destination"} value={hospital?.name||selectedHospital?.name||currentCondition?.hospitalName||"AIIMS Apex Heart Institute"}/>
    <Summary icon={Clock3} label={preview?"Sample ETA":"Estimated arrival"} value={preview?`${assignedAmbulance.etaMinutes} min (${assignedAmbulance.distanceKm} km)`:trip?.etaMinutes?trip.etaMinutes+" min":"Not available"}/>
   </div>
   <div className="sahay-fleet-accordion">

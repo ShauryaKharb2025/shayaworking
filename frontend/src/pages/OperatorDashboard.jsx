@@ -3,6 +3,167 @@ import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import StatusPill from "../components/StatusPill";
+import FleetMap from "../components/FleetMap";
+import { connectSocket } from "../api/socket";
+
+function AmbulanceLocationEditor({ ambulance, onLocationUpdated }) {
+  const [editing, setEditing] = useState(false);
+  const coords = ambulance.location?.coordinates || [77.2090, 28.6139];
+  const [lat, setLat] = useState(coords[1] ?? 28.6139);
+  const [lng, setLng] = useState(coords[0] ?? 77.2090);
+  const [updating, setUpdating] = useState(false);
+  const [feedback, setFeedback] = useState("");
+
+  const presets = [
+    { label: "AIIMS / South", lat: 28.5672, lng: 77.2090 },
+    { label: "Connaught Place", lat: 28.6320, lng: 77.2140 },
+    { label: "Safdarjung", lat: 28.5700, lng: 77.2060 },
+    { label: "Rajinder Nagar", lat: 28.6380, lng: 77.1890 },
+    { label: "Saket", lat: 28.5200, lng: 77.1850 },
+    { label: "Rohini", lat: 28.7100, lng: 77.1140 },
+  ];
+
+  async function handleUpdate(e) {
+    if (e) e.preventDefault();
+    setUpdating(true);
+    setFeedback("");
+    try {
+      await api.post(`/dispatch/ambulance/${ambulance._id}/location`, {
+        lat: Number(lat),
+        lng: Number(lng),
+      });
+      setFeedback("✓ Location updated successfully");
+      onLocationUpdated(ambulance._id, Number(lat), Number(lng));
+      setTimeout(() => {
+        setEditing(false);
+        setFeedback("");
+      }, 1500);
+    } catch (err) {
+      setFeedback(err.response?.data?.message || "Failed to update location");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  function handleCurrentLocation() {
+    if (!navigator.geolocation) {
+      setFeedback("Geolocation not supported by browser");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLat(pos.coords.latitude);
+        setLng(pos.coords.longitude);
+      },
+      () => setFeedback("Could not get current location")
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-paper/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs text-ink/70">
+          <span className="font-semibold text-navy">📍 Live Location:</span>
+          <span>
+            {ambulance.location?.coordinates
+              ? `${Number(ambulance.location.coordinates[1]).toFixed(4)}°N, ${Number(ambulance.location.coordinates[0]).toFixed(4)}°E`
+              : "No GPS reported"}
+          </span>
+          {ambulance.lastPingAt && (
+            <span className="text-[10px] text-ink/40">
+              ({new Date(ambulance.lastPingAt).toLocaleTimeString()})
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing(!editing)}
+          className="rounded-full border border-navy/20 bg-white px-3 py-1 text-xs font-semibold text-navy hover:bg-navy/5"
+        >
+          {editing ? "Close" : "Update Location"}
+        </button>
+      </div>
+
+      {editing && (
+        <form onSubmit={handleUpdate} className="mt-3 space-y-2 border-t border-line/60 pt-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] font-medium text-ink/60">Latitude</label>
+              <input
+                type="number"
+                step="any"
+                value={lat}
+                onChange={(e) => setLat(e.target.value)}
+                className="mt-0.5 w-full rounded border border-line bg-white px-2.5 py-1.5 text-xs text-navy outline-none focus:border-navy"
+                placeholder="28.6139"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-ink/60">Longitude</label>
+              <input
+                type="number"
+                step="any"
+                value={lng}
+                onChange={(e) => setLng(e.target.value)}
+                className="mt-0.5 w-full rounded border border-line bg-white px-2.5 py-1.5 text-xs text-navy outline-none focus:border-navy"
+                placeholder="77.2090"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            <span className="text-[10px] font-semibold uppercase text-ink/40 self-center">Presets:</span>
+            {presets.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => {
+                  setLat(p.lat);
+                  setLng(p.lng);
+                }}
+                className="rounded bg-white border border-line px-2 py-0.5 text-[11px] font-medium text-ink/80 hover:bg-navy/5"
+              >
+                {p.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={handleCurrentLocation}
+              className="rounded bg-white border border-line px-2 py-0.5 text-[11px] font-semibold text-signal-dark hover:bg-signal/5"
+            >
+              📍 My GPS
+            </button>
+          </div>
+
+          {feedback && (
+            <p className={`text-xs ${feedback.startsWith("✓") ? "text-emerald-600 font-medium" : "text-signal"}`}>
+              {feedback}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="rounded-full border border-line px-3 py-1 text-xs text-ink/60 hover:bg-paper"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updating}
+              className="rounded-full bg-navy px-4 py-1 text-xs font-semibold text-white hover:bg-navy-light disabled:opacity-50"
+            >
+              {updating ? "Updating..." : "Save Location"}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
 
 function VehicleRecord({ ambulance, onSaved }) {
   const [opened, setOpened] = useState(false);
@@ -95,6 +256,50 @@ export default function OperatorDashboard() {
   useEffect(() => {
     loadAmbulances();
   }, [user?.operator]);
+
+  useEffect(() => {
+    const socket = connectSocket();
+    function onPing(payload) {
+      if (!payload?.ambulanceId) return;
+      setAmbulances((prev) =>
+        prev.map((a) => {
+          if (a._id === payload.ambulanceId) {
+            return {
+              ...a,
+              location: {
+                type: "Point",
+                coordinates: [payload.location.lng, payload.location.lat],
+              },
+              lastPingAt: payload.location.timestamp || new Date().toISOString(),
+            };
+          }
+          return a;
+        })
+      );
+    }
+    socket.on("fleet:ping", onPing);
+    return () => {
+      socket.off("fleet:ping", onPing);
+    };
+  }, []);
+
+  const handleLocationUpdated = (ambulanceId, lat, lng) => {
+    setAmbulances((prev) =>
+      prev.map((a) => {
+        if (a._id === ambulanceId) {
+          return {
+            ...a,
+            location: {
+              type: "Point",
+              coordinates: [lng, lat],
+            },
+            lastPingAt: new Date().toISOString(),
+          };
+        }
+        return a;
+      })
+    );
+  };
 
   const updateForm = (field, value) => {
     setForm((prev) => ({
@@ -317,8 +522,22 @@ export default function OperatorDashboard() {
         </section>
 
         {/* FLEET */}
-        <section>
-          <div className="mb-4 flex items-center justify-between">
+        <section className="space-y-6">
+          <div className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+            <div className="mb-3">
+              <h2 className="font-display text-lg font-semibold text-navy">
+                Live Fleet Tracking
+              </h2>
+              <p className="text-xs text-ink/50">
+                Real-time GPS positions of all ambulances in your fleet.
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-line" style={{ height: "380px" }}>
+              <FleetMap ambulances={ambulances} />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
             <div>
               <h2 className="font-display text-xl font-semibold text-navy">
                 Your fleet
@@ -422,6 +641,7 @@ export default function OperatorDashboard() {
                   </div>
                   <VehicleRecord ambulance={ambulance} onSaved={updated =>
                     setAmbulances(rows => rows.map(row => row._id === updated._id ? updated : row))} />
+                  <AmbulanceLocationEditor ambulance={ambulance} onLocationUpdated={handleLocationUpdated} />
                 </div>
               ))}
             </div>

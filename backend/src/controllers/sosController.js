@@ -95,11 +95,14 @@ async function createSOS(req, res) {
 const isCovered =
   coverage === "live" || coverage === "limited";
 
+const chosenHospitalId = req.body.hospitalId || req.body.hospital || null;
+
 const trip = await Trip.create({
   patient: req.user.sub,
   channel,
   symptoms,
   requestedAmbulanceTier,
+  hospital: chosenHospitalId || undefined,
 
   pickupLocation: {
     type: "Point",
@@ -119,8 +122,25 @@ const trip = await Trip.create({
     : "waitlisted",
 
   autoDispatchAt: isCovered ? new Date() : null,
-  events: [{ type: "sos:received", at: new Date().toISOString() }],
+  events: [
+    { type: "sos:received", at: new Date().toISOString() },
+    ...(chosenHospitalId ? [{ type: "hospital:selected", at: new Date().toISOString(), payload: { hospitalId: chosenHospitalId } }] : []),
+  ],
 });
+
+if (chosenHospitalId && isCovered) {
+  try {
+    await require("../data/prisma").hospitalReferral.create({
+      data: {
+        tripId: trip._id,
+        hospitalId: chosenHospitalId,
+        status: "proposed",
+      },
+    });
+  } catch (e) {
+    console.warn("[sos] referral for chosen hospital:", e.message);
+  }
+}
     if (coverage === "coming_soon") {
       return res.status(201).json({
         trip,

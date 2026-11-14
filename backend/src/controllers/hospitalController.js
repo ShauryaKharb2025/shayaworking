@@ -8,6 +8,39 @@ async function createHospital(req, res) {
 
 async function listHospitals(req, res) {
   const hospitals = await Hospital.find();
+  const { lat, lng, specialty, symptoms } = req.query;
+  const userLat = lat !== undefined && lat !== "" && Number.isFinite(Number(lat)) ? Number(lat) : null;
+  const userLng = lng !== undefined && lng !== "" && Number.isFinite(Number(lng)) ? Number(lng) : null;
+
+  if (userLat !== null || specialty || symptoms) {
+    const { distanceKm } = require("../services/matching");
+    const userCoords = userLat !== null && userLng !== null ? [userLng, userLat] : null;
+    const searchSpecialty = specialty ? String(specialty).toLowerCase().trim() : "";
+    const searchSymptoms = symptoms ? String(symptoms).toLowerCase().trim() : "";
+
+    const enriched = hospitals.map(h => {
+      const doc = h.toJSON ? h.toJSON() : (h.toObject ? h.toObject() : { ...h });
+      const coords = doc.location?.coordinates;
+      const dist = coords && Array.isArray(coords) && userCoords ? distanceKm(userCoords, coords) : 999;
+
+      const specs = (doc.specialties || []).map(s => String(s).toLowerCase());
+      let matchesSpecialty = false;
+      if (searchSpecialty) {
+        matchesSpecialty = specs.some(s => s === searchSpecialty || s.includes(searchSpecialty) || searchSpecialty.includes(s));
+      } else if (searchSymptoms) {
+        matchesSpecialty = specs.some(s => searchSymptoms.includes(s) || s.split(/\s+/).some(w => w.length > 3 && searchSymptoms.includes(w)));
+      }
+
+      return {
+        ...doc,
+        distanceKm: dist,
+        matchesSpecialty,
+      };
+    }).sort((a, b) => {
+      return (Number(b.matchesSpecialty) - Number(a.matchesSpecialty)) || (a.distanceKm - b.distanceKm);
+    });
+    return res.json({ hospitals: enriched });
+  }
   return res.json({ hospitals });
 }
 

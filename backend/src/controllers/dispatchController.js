@@ -725,6 +725,17 @@ async function updateAmbulanceLocation(
       });
     }
 
+    if (
+      req.user.role === "operator" &&
+      req.account?.operatorId &&
+      ambulance.operator &&
+      String(ambulance.operator._id || ambulance.operator) !== String(req.account.operatorId)
+    ) {
+      return res.status(403).json({
+        message: "You can only update ambulances belonging to your fleet",
+      });
+    }
+
     /*
      * ==========================
      * UPDATE LOCATION
@@ -762,7 +773,7 @@ async function updateAmbulanceLocation(
      * Dispatcher
      */
 
-    io?.to("dispatcher").emit(
+    io?.emit(
       "fleet:ping",
       {
         ambulanceId:

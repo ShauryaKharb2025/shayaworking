@@ -2,7 +2,7 @@ const db = require("../data/prisma");
 const Ambulance = require("../models/Ambulance");
 
 function profile(req) {
-  const { vehicleNumber, tier, equipment, crew, complianceVerified, status, driverId } = req.body;
+  const { vehicleNumber, tier, equipment, crew, complianceVerified, status, driverId, location } = req.body;
   if (vehicleNumber !== undefined && (typeof vehicleNumber !== "string" || !vehicleNumber.trim())) return null;
   if (tier !== undefined && !["ALS", "BLS"].includes(tier)) return null;
   if (equipment !== undefined && (!Array.isArray(equipment) || equipment.some(item => typeof item !== "string"))) return null;
@@ -14,6 +14,16 @@ function profile(req) {
     name, role, certified: req.user.role === "admin" && certified === true,
     ...(req.user.role === "admin" && typeof userId === "string" ? { userId } : {}),
   }));
+  if (location?.coordinates && Array.isArray(location.coordinates) &&
+      location.coordinates.length === 2 &&
+      Number.isFinite(Number(location.coordinates[0])) &&
+      Number.isFinite(Number(location.coordinates[1]))) {
+    result.location = {
+      type: "Point",
+      coordinates: [Number(location.coordinates[0]), Number(location.coordinates[1])],
+    };
+    result.lastPingAt = new Date();
+  }
   if (req.user.role === "admin" && typeof complianceVerified === "boolean") result.complianceVerified = complianceVerified;
   else if (tier !== undefined || equipment !== undefined || crew !== undefined) result.complianceVerified = false;
   if (["admin", "operator", "dispatcher"].includes(req.user.role) && (driverId === null || typeof driverId === "string")) result.driverId = driverId;

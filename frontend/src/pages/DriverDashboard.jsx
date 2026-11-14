@@ -23,9 +23,11 @@ export default function DriverDashboard() {
   loadDriverData();
 
   const socket = connectSocket();
+  const join = () => socket.emit("join:driver");
+  join();
+  socket.on("connect", join);
 
-  // Driver-specific room
-  socket.emit("join:driver");
+  const interval = setInterval(loadDriverData, 5000);
 
   const handleTripAssigned = (payload) => {
     console.log("[driver] trip assigned:", payload);
@@ -75,6 +77,8 @@ export default function DriverDashboard() {
   socket.on("trip:status", handleTripStatus);
 
   return () => {
+    clearInterval(interval);
+    socket.off("connect", join);
     socket.off("case:refresh", loadDriverData);
     socket.off("trip:assigned", handleTripAssigned);
     socket.off("trip:matched", handleTripMatched);
@@ -661,6 +665,13 @@ useEffect(() => {
                 >
                   📍 Arrived at pickup
                 </button>
+              )}
+
+              {trip.status ===
+                "picked_up" && !trip.hospital && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-800">
+                  Patient on board. Awaiting destination hospital confirmation from dispatch/ER.
+                </div>
               )}
 
               {trip.status ===

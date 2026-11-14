@@ -874,7 +874,7 @@ async function updateTripStatus(
 
     if (
       req.user.role === "patient" &&
-      String(trip.patient) !==
+      String(trip.patient?._id || trip.patient || trip.patientId) !==
         String(req.user.sub)
     ) {
       return res.status(403).json({
@@ -1040,6 +1040,7 @@ async function updateTripStatus(
       if (driverId) {
         io?.in(`driver:${driverId}`).socketsLeave(`trip:${trip._id}`);
         io?.to(`driver:${driverId}`).emit("case:refresh", { tripId: trip._id });
+        io?.to("driver").emit("case:refresh", { tripId: trip._id });
       }
 
       /*
@@ -1054,6 +1055,7 @@ async function updateTripStatus(
           trip,
         }
       );
+      io?.to(`trip:${trip._id}`).emit("case:refresh", { tripId: trip._id });
 
       /*
        * Dispatcher
@@ -1067,6 +1069,7 @@ async function updateTripStatus(
           trip,
         }
       );
+      io?.to("dispatcher").emit("case:refresh", { tripId: trip._id });
 
       return res.json({
         trip,

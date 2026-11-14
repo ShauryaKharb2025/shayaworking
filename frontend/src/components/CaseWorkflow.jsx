@@ -69,7 +69,7 @@ function eventLabel(type) {
     "hospital:referral_unavailable": "Hospital referral withdrawn after availability changed",
     "status:dispatched": "Driver accepted the offer",
   };
-  return labels[type] || type.replace(/^(status:|observation:)/, "").replace(/[:_]/g, " ");
+  return labels[type] || (type ? type.replace(/^(status:|observation:)/, "").replace(/[:_]/g, " ") : "");
 }
 
 export function JourneyLog({ caseId }) {

@@ -6,13 +6,13 @@ import { MemoryRouter } from "react-router-dom";
 import PatientSOS from "../pages/PatientSOS";
 import RolePreview from "../pages/RolePreview";
 import AppShell from "../components/AppShell";
-const mocks=vi.hoisted(()=>({user:null,get:vi.fn(),post:vi.fn(),navigate:vi.fn()}));
+const mocks=vi.hoisted(()=>({user:null,get:vi.fn(),post:vi.fn(),patch:vi.fn(),navigate:vi.fn()}));
 vi.mock("../context/AuthContext",()=>({useAuth:()=>({user:mocks.user,logout:vi.fn()})}));
-vi.mock("../api/axios",()=>({default:{get:mocks.get,post:mocks.post}}));
+vi.mock("../api/axios",()=>({default:{get:mocks.get,post:mocks.post,patch:mocks.patch}}));
 vi.mock("react-router-dom",async()=>({...await vi.importActual("react-router-dom"),useNavigate:()=>mocks.navigate}));
 vi.mock("../components/JourneyMap",()=>({default:({onPickup,preview})=><div aria-label="Journey map">{preview?"Sample map":"Case map"}{onPickup&&<button onClick={()=>onPickup({lat:28.65,lng:77.15})}>Choose pickup pin</button>}</div>}));
 const show=(node)=>(()=>render(<MemoryRouter>{node}</MemoryRouter>))();
-beforeEach(()=>{mocks.user=null;mocks.get.mockReset();mocks.post.mockReset();mocks.navigate.mockReset();mocks.get.mockImplementation(async path=>({data:path.endsWith("/journey")?{status:"requested",events:[],highlights:[],observations:[]}: {trips:[]}}))});
+beforeEach(()=>{mocks.user=null;mocks.get.mockReset();mocks.post.mockReset();mocks.patch.mockReset();mocks.navigate.mockReset();mocks.get.mockImplementation(async path=>({data:path.endsWith("/journey")?{status:"requested",events:[],highlights:[],observations:[]}: {trips:[]}}))});
 afterEach(cleanup);
 describe("SOS dashboard",()=>{
  it("labels anonymous sample data and redirects booking to sign-in without posting",()=>{
@@ -58,6 +58,28 @@ describe("SOS dashboard",()=>{
   await screen.findByRole("alert");
   expect(screen.queryByText("SH-CARD-001")).toBeNull();
   expect(screen.getByText("No active case")).toBeTruthy();
+ });
+ it("allows a patient to cancel an active ambulance request",async()=>{
+  window.confirm = () => true;
+  mocks.user = { id: "patient", role: "patient" };
+  mocks.get.mockImplementation(async (path) => {
+    if (path === "/sos") {
+      return { data: { trips: [{ _id: "case-99", status: "requested", patientId: "patient" }] } };
+    }
+    if (path === "/sos/case-99") {
+      return { data: { trip: { _id: "case-99", status: "requested", patientId: "patient", events: [] } } };
+    }
+    if (path.endsWith("/journey")) {
+      return { data: { status: "requested", events: [], highlights: [], observations: [] } };
+    }
+    return { data: {} };
+  });
+  mocks.patch.mockResolvedValue({ data: { trip: { _id: "case-99", status: "cancelled" } } });
+  show(<PatientSOS/>);
+  const cancelBtns = await screen.findAllByRole("button", { name: /Cancel Ambulance Request/i });
+  expect(cancelBtns.length).toBeGreaterThan(0);
+  fireEvent.click(cancelBtns[0]);
+  await waitFor(() => expect(mocks.patch).toHaveBeenCalledWith("/dispatch/trip/case-99/status", { status: "cancelled" }));
  });
 });
 describe("shared role workspace",()=>{

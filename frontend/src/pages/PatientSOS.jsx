@@ -97,6 +97,16 @@ export default function PatientSOS() {
   }catch(e){setError(e.response?.data?.message||"Could not send SOS. Please try again or call 112.");}
   finally{setBusy(false)}
  }
+ async function cancelRequest(){
+  if(!trip?._id||busy)return;
+  if(!window.confirm("Are you sure you want to cancel this ambulance request?"))return;
+  setBusy(true);setError("");
+  try{
+   await api.patch(`/dispatch/trip/${trip._id}/status`,{status:"cancelled"});
+   setTrip(prev=>prev?{...prev,status:"cancelled"}:null);
+  }catch(e){setError(e.response?.data?.message||"Could not cancel ambulance request.");}
+  finally{setBusy(false)}
+ }
  const ambulance=trip?.ambulance,hospital=trip?.hospital;
  const stage=preview?2:({requested:0,offered:0,picked_up:2,arrived_hospital:3,matched:1,dispatched:1,en_route:2,arrived_pickup:2,en_route_hospital:3,handed_off:4}[trip?.status]??-1);
  const timeline=[
@@ -140,13 +150,50 @@ export default function PatientSOS() {
       <fieldset disabled={!!trip}><legend>Requested ambulance type</legend><div className="sahay-type-options">{["ALS","BLS"].map(type=><label key={type} className={(trip?.requestedAmbulanceTier||needs)===type?"checked":""}><input type="radio" name="ambulanceType" checked={(trip?.requestedAmbulanceTier||needs)===type} onChange={()=>setNeeds(type)}/>{type} ({type==="ALS"?"Advanced":"Basic"})</label>)}</div></fieldset>
       <p className="sahay-field-help">{trip?"Vehicle allocation and equipment are confirmed by dispatch.":"Preference for review. Dispatch determines the required vehicle and equipment."}</p>
       <button className="sahay-button dark sahay-confirm" type="submit" disabled={busy||!!trip||medical||!canRequest}>{!canRequest?"Patient account required":busy?"Please wait…":trip?"SOS request received":"Confirm & Send SOS"} {!trip&&<ArrowRight size={20}/>}</button>
+      {trip && !["handed_off", "cancelled"].includes(trip.status) && (
+        <button
+          type="button"
+          className="sahay-button sahay-cancel-btn"
+          disabled={busy}
+          onClick={cancelRequest}
+          style={{ marginTop: "10px", width: "100%", background: "#fee2e2", color: "#b91c1c", border: "1px solid #fca5a5" }}
+        >
+          {busy ? "Cancelling…" : "✕ Cancel Ambulance Request"}
+        </button>
+      )}
+      {trip?.status === "cancelled" && (
+        <div style={{ marginTop: "10px", padding: "10px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", textAlign: "center" }}>
+          <p style={{ margin: 0, color: "#991b1b", fontSize: "13px", fontWeight: 650 }}>Ambulance request cancelled.</p>
+          <button
+            type="button"
+            className="sahay-button dark"
+            style={{ marginTop: "8px", width: "100%", fontSize: "13px" }}
+            onClick={() => setTrip(null)}
+          >
+            Start New Emergency Request
+          </button>
+        </div>
+      )}
       {trip&&<><Link to={"/trip/"+trip._id+"/details"} className="sahay-subtle-link">Trip controls &amp; messages →</Link><Link to="/patient/history" className="sahay-subtle-link">View your trip history</Link></>}
      </form>
      <JourneyMap preview={preview} trip={trip} pickup={pickup} onPickup={updatePickup}/>
     </div>
    </div>
    <aside className="sahay-case-column">
-    <section className="sahay-card sahay-case-summary"><div><div><span className="sahay-muted">Case ID</span><h2>{preview?"SH-CARD-001":trip?trip._id:loading?"Loading…":"No active case"}</h2></div><span className="sahay-case-badge"><HeartPulse size={20}/>{preview?`${currentCondition?.tier || "ALS"} (${currentCondition?.category || "Cardiac"})`:ambulance?.tier||"SOS"}</span></div><div className={"sahay-status "+(trip?.status==="cancelled"?"cancelled":"")}><span>i</span><b>Status:</b> {preview?"Ambulance En Route":loading?"Loading case…":statusLabels[trip?.status]||"Ready when you need help"}</div></section>
+    <section className="sahay-card sahay-case-summary">
+     <div><div><span className="sahay-muted">Case ID</span><h2>{preview?"SH-CARD-001":trip?trip._id:loading?"Loading…":"No active case"}</h2></div><span className="sahay-case-badge"><HeartPulse size={20}/>{preview?`${currentCondition?.tier || "ALS"} (${currentCondition?.category || "Cardiac"})`:ambulance?.tier||"SOS"}</span></div>
+     <div className={"sahay-status "+(trip?.status==="cancelled"?"cancelled":"")}><span>i</span><b>Status:</b> {preview?"Ambulance En Route":loading?"Loading case…":statusLabels[trip?.status]||"Ready when you need help"}</div>
+     {trip && !["handed_off", "cancelled"].includes(trip.status) && (
+       <button
+         type="button"
+         disabled={busy}
+         onClick={cancelRequest}
+         style={{ marginTop: "10px", width: "100%", background: "#fff", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+       >
+         {busy ? "Cancelling…" : "Cancel Ambulance Request"}
+       </button>
+     )}
+    </section>
     <section className="sahay-card sahay-timeline"><h2><ClipboardList/> Response Timeline</h2><ol>{timeline.map(([title,description,at],i)=><li key={title} className={i<stage?"complete":i===stage?"current":""}><span className="sahay-timeline-node">{i<stage?<Check size={14}/>:null}</span><div><div><strong>{title}</strong><time>{preview?(i===0?"10:24 AM":i===1?"10:26 AM":i===2?"10:27 AM":"Pending"):time(at)}</time></div><p>{description}</p></div></li>)}</ol>{!preview&&<p className="sahay-timeline-foot">Updates refresh every 10 seconds. Pending milestones are not confirmations.</p>}</section>
     {trip && canRequest && <JourneyLog key={"log-" + trip._id} caseId={trip._id} />}
     {trip && canRequest && <CaregiverInvitations key={trip._id} tripId={trip._id} />}

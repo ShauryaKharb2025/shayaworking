@@ -10,12 +10,10 @@ export default function Navbar() {
     <header className="border-b border-line bg-paper/90 backdrop-blur sticky top-0 z-40">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link to="/" className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-navy text-sm font-bold text-white">
-            जS
-          </span>
+          <img src="/sahay-mark.svg" alt="" className="h-10 w-10" />
 
           <span className="font-display text-lg font-semibold text-navy">
-            JeevanSetu 2.0
+            Sahay
           </span>
         </Link>
 

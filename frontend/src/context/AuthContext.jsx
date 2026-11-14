@@ -5,7 +5,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem("jsetu_user");
+    const raw = localStorage.getItem("sahay_user");
     return raw ? JSON.parse(raw) : null;
   });
   const [loading, setLoading] = useState(false);
@@ -16,8 +16,8 @@ export function AuthProvider({ children }) {
     setLoading(true);
     try {
       const { data } = await api.post("/auth/google", { idToken, role });
-      localStorage.setItem("jsetu_access_token", data.accessToken);
-      localStorage.setItem("jsetu_user", JSON.stringify(data.user));
+      localStorage.setItem("sahay_access_token", data.accessToken);
+      localStorage.setItem("sahay_user", JSON.stringify(data.user));
       setUser(data.user);
       return data.user;
     } finally {
@@ -29,8 +29,8 @@ export function AuthProvider({ children }) {
     try {
       await api.post("/auth/logout");
     } finally {
-      localStorage.removeItem("jsetu_access_token");
-      localStorage.removeItem("jsetu_user");
+      localStorage.removeItem("sahay_access_token");
+      localStorage.removeItem("sahay_user");
       setUser(null);
     }
   }, []);

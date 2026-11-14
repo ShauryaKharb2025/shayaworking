@@ -7,7 +7,7 @@ const api = axios.create({
 
 // Attach the access token (kept in memory / localStorage) to every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("jsetu_access_token");
+  const token = localStorage.getItem("sahay_access_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -27,12 +27,12 @@ api.interceptors.response.use(
           {},
           { withCredentials: true }
         );
-        localStorage.setItem("jsetu_access_token", data.accessToken);
+        localStorage.setItem("sahay_access_token", data.accessToken);
         original.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(original);
       } catch (refreshErr) {
-        localStorage.removeItem("jsetu_access_token");
-        localStorage.removeItem("jsetu_user");
+        localStorage.removeItem("sahay_access_token");
+        localStorage.removeItem("sahay_user");
         window.location.href = "/login";
         return Promise.reject(refreshErr);
       } finally {

@@ -56,13 +56,14 @@ describe("SOS dashboard",()=>{
  it("does not substitute preview data when an authenticated API request fails",async()=>{
   mocks.user={id:"patient",role:"patient"};mocks.get.mockRejectedValue(new Error("offline"));show(<PatientSOS/>);
   await screen.findByRole("alert");
-  expect(screen.queryByText("JS-CARD-001")).toBeNull();
+  expect(screen.queryByText("SH-CARD-001")).toBeNull();
   expect(screen.getByText("No active case")).toBeTruthy();
  });
 });
 describe("shared role workspace",()=>{
  it("provides all role navigation and toggles notifications",()=>{
   show(<AppShell><p>Workspace</p></AppShell>);
+  expect(screen.getByRole("link",{name:"Sahay home"}).querySelector("img").getAttribute("src")).toBe("/sahay-mark.svg");
   expect(screen.getByRole("navigation",{name:"Role navigation"}).querySelectorAll("a")).toHaveLength(7);
   fireEvent.click(screen.getByRole("button",{name:"Notifications"}));
   expect(screen.getByText("Sign in to receive updates for your cases.")).toBeTruthy();

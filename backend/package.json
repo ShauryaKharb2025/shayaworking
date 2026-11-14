@@ -1,7 +1,7 @@
 {
-  "name": "jeevansetu-backend",
+  "name": "sahay-backend",
   "version": "1.0.0",
-  "description": "JeevanSetu ambulance aggregator - Express + MongoDB backend",
+  "description": "Sahay ambulance aggregator - Express + PostgreSQL backend",
   "main": "src/server.js",
   "type": "commonjs",
   "scripts": {

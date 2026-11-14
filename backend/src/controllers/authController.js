@@ -39,7 +39,7 @@ async function googleLogin(req, res) {
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
 
-    res.cookie("jsetu_refresh", refreshToken, {
+    res.cookie("sahay_refresh", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -67,7 +67,7 @@ async function googleLogin(req, res) {
 /** POST /api/auth/refresh - reads httpOnly cookie, issues a new access token */
 async function refresh(req, res) {
   try {
-    const token = req.cookies?.jsetu_refresh;
+    const token = req.cookies?.sahay_refresh;
     if (!token) return res.status(401).json({ message: "No refresh token" });
 
     const decoded = verifyRefreshToken(token);
@@ -82,7 +82,7 @@ async function refresh(req, res) {
 }
 
 async function logout(req, res) {
-  res.clearCookie("jsetu_refresh");
+  res.clearCookie("sahay_refresh");
   return res.json({ message: "Logged out" });
 }
 

@@ -1,5 +1,5 @@
 """
-JeevanSetu Triage Engine - separate Flask AI/ML microservice.
+Sahay Triage Engine - separate Flask AI/ML microservice.
 
 This is intentionally kept separate from the Express backend (per the pitch deck's
 "Triage Engine" box in the Platform Core) so it can be swapped, scaled, or replaced
@@ -103,7 +103,7 @@ def classify_symptoms(symptoms):
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "jeevansetu-ai-triage"})
+    return jsonify({"status": "ok", "service": "sahay-ai-triage"})
 
 
 @app.route("/triage", methods=["POST"])

@@ -40,7 +40,7 @@ app.use(morgan("dev"));
 const sosLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 });
 app.use("/api/sos", sosLimiter);
 
-app.get("/api/health", (req, res) => res.json({ status: "ok", service: "jeevansetu-backend" }));
+app.get("/api/health", (req, res) => res.json({ status: "ok", service: "sahay-backend" }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/sos", sosRoutes);
@@ -61,7 +61,7 @@ const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
   server.listen(PORT, process.env.HOST || "127.0.0.1", () => {
     console.log(
-      `[server] JeevanSetu API running on port ${PORT}`
+      `[server] Sahay API running on port ${PORT}`
     );
 
     startAutoDispatchWorker(io);

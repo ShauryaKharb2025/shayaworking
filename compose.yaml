@@ -2,17 +2,17 @@ services:
   db:
     image: postgis/postgis:17-3.5
     environment:
-      POSTGRES_DB: jeevansetu
+      POSTGRES_DB: sahay
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
-      - jeevansetu_pg:/var/lib/postgresql/data
+      - sahay_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d jeevansetu"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sahay"]
       interval: 5s
       timeout: 5s
       retries: 10
 volumes:
-  jeevansetu_pg:
+  sahay_pg:

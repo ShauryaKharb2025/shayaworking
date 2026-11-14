@@ -17,11 +17,11 @@ import RolePreview from "./pages/RolePreview";
 import "./styles/dashboard.css";
 function RolePage({role,roles,children}) {
  const {user}=useAuth();
- return user?<ProtectedRoute roles={roles}><div className="js-legacy">{children}</div></ProtectedRoute>:<RolePreview role={role}/>;
+ return user?<ProtectedRoute roles={roles}><div className="sahay-legacy">{children}</div></ProtectedRoute>:<RolePreview role={role}/>;
 }
-const Legacy=({children})=><div className="js-legacy">{children}</div>;
+const Legacy=({children})=><div className="sahay-legacy">{children}</div>;
 export default function App() {
- return <AppShell><Suspense fallback={<div className="js-workspace" role="status">Loading workspace…</div>}><Routes>
+ return <AppShell><Suspense fallback={<div className="sahay-workspace" role="status">Loading workspace…</div>}><Routes>
   <Route path="/" element={<PatientSOS/>}/>
   <Route path="/patient" element={<PatientSOS/>}/>
   <Route path="/sos" element={<PatientSOS/>}/>
@@ -37,6 +37,6 @@ export default function App() {
   <Route path="/operator" element={<RolePage role="operator" roles={["operator","admin"]}><OperatorDashboard/></RolePage>}/>
   <Route path="/clinician" element={<RolePreview role="clinician"/>}/>
   <Route path="/caregiver" element={<RolePreview role="caregiver"/>}/>
-  <Route path="*" element={<div className="js-role-placeholder js-card"><h1>Page not found</h1><a href="/" className="js-button dark">Return to Patient / SOS</a></div>}/>
+  <Route path="*" element={<div className="sahay-role-placeholder sahay-card"><h1>Page not found</h1><a href="/" className="sahay-button dark">Return to Patient / SOS</a></div>}/>
  </Routes></Suspense></AppShell>;
 }

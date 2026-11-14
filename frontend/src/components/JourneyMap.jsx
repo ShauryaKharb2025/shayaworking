@@ -5,7 +5,7 @@ import { Navigation } from "./Icons";
 const valid=coordinates=>Array.isArray(coordinates)&&coordinates.length===2&&coordinates.every(Number.isFinite)&&Math.abs(coordinates[0])<=180&&Math.abs(coordinates[1])<=90&&coordinates.some(n=>n!==0);
 const point=(coordinates,fallback)=>valid(coordinates)?[coordinates[1],coordinates[0]]:fallback;
 function tooltip(text){const node=document.createElement("span");node.textContent=text;return node;}
-function marker(className,text){return L.divIcon({className:"js-map-marker "+className,html:text,iconSize:[40,40],iconAnchor:[20,40]});}
+function marker(className,text){return L.divIcon({className:"sahay-map-marker "+className,html:text,iconSize:[40,40],iconAnchor:[20,40]});}
 export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
  const container=useRef(null),map=useRef(null),layers=useRef(null);
  const [offline,setOffline]=useState(false);
@@ -41,10 +41,10 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
   if(preview)L.polyline([pickupPoint,[28.64,77.163],vehicle,[28.62,77.19],[28.59,77.19],hospital],{color:"#3474ed",weight:4,dashArray:"8 7"}).addTo(layers.current);
   map.current.fitBounds(L.latLngBounds(bounds).pad(.25),{maxZoom:13});
  },[trip,pickup,preview,onPickup]);
- return <section className="js-map" aria-label="Pickup, ambulance and hospital map">
-  <div ref={container} className="js-map-canvas"/>
-  <div className="js-map-live"><i className={offline||stale?"offline":""}/>{preview?"Preview journey":trip?stale?"GPS stale / unavailable":"Last reported position":"Choose pickup"}<span>{offline?"Tiles unavailable":"OSM basemap"}</span></div>
-  {offline&&<div className="js-map-fallback"><Navigation/><strong>Map tiles unavailable</strong><span>Markers show the last known coordinates. Check your connection.</span></div>}
-  <div className="js-map-caption">{preview?"Illustrative route · not live tracking":pickup?"Drag the pickup pin to adjust location":"Positions from case records · no road route estimate"}</div>
+ return <section className="sahay-map" aria-label="Pickup, ambulance and hospital map">
+  <div ref={container} className="sahay-map-canvas"/>
+  <div className="sahay-map-live"><i className={offline||stale?"offline":""}/>{preview?"Preview journey":trip?stale?"GPS stale / unavailable":"Last reported position":"Choose pickup"}<span>{offline?"Tiles unavailable":"OSM basemap"}</span></div>
+  {offline&&<div className="sahay-map-fallback"><Navigation/><strong>Map tiles unavailable</strong><span>Markers show the last known coordinates. Check your connection.</span></div>}
+  <div className="sahay-map-caption">{preview?"Illustrative route · not live tracking":pickup?"Drag the pickup pin to adjust location":"Positions from case records · no road route estimate"}</div>
  </section>
 }

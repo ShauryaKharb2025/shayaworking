@@ -1,4 +1,4 @@
-# JeevanSetu local development
+# Sahay local development
 
 The application uses React/Vite, Express/Socket.IO, PostgreSQL and Prisma.
 MongoDB and Mongoose are no longer required.
@@ -128,7 +128,7 @@ transaction rollback and competing reservations.
 - npm run db:generate: regenerate Prisma Client after schema changes.
 - npm run seed: replay the synthetic fleet/coverage fixture.
 
-## JeevanSetu 2.0 dashboard design
+## Sahay dashboard design
 
 The homepage now follows the supplied patient dashboard reference: navy role
 navigation, SOS / medical-help cards, three-step intake, incident details, OSM map,
@@ -160,3 +160,10 @@ preview isolation, role navigation, notifications, unavailable service handling,
 API errors and unavailable clinical saving. Seven PostgreSQL integration tests
 also pass. Browser preview access was declined during implementation; visual
 inspection of the running desktop/mobile layouts has not been completed.
+
+## Brand assets
+
+Sahay uses a navy S mark with a coral heartbeat accent.
+Editable vector assets are frontend/public/sahay-mark.svg and sahay-logo.svg.
+Transparent PNG exports are provided alongside them. The mark is used in the
+application header and as the favicon.

@@ -31,5 +31,5 @@ export default function FleetMap({center={lat:28.635,lng:77.17},zoom=12,markers=
   }
   if(bounds.length)map.current.fitBounds(L.latLngBounds(bounds).pad(.15),{maxZoom:13});
  },[markers,ambulances,trips,zones]);
- return <div className="js-map" style={{height:"100%",minHeight:400}}><div className="js-map-canvas" ref={ref}/><div className="js-map-live"><i className={offline?"offline":""}/>{offline?"Basemap offline · positions retained":"OpenStreetMap · last reported positions"}</div>{offline&&<div className="js-map-caption">Map tiles unavailable. Last reported coordinates are retained.</div>}</div>;
+ return <div className="sahay-map" style={{height:"100%",minHeight:400}}><div className="sahay-map-canvas" ref={ref}/><div className="sahay-map-live"><i className={offline?"offline":""}/>{offline?"Basemap offline · positions retained":"OpenStreetMap · last reported positions"}</div>{offline&&<div className="sahay-map-caption">Map tiles unavailable. Last reported coordinates are retained.</div>}</div>;
 }

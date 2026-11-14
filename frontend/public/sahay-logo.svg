@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 216 80" fill="none"><title>Sahay logo</title><desc>Sahay wordmark with an S and heartbeat symbol.</desc><g transform="translate(4 8)">
+  
+  
+  <rect x="2" y="2" width="60" height="60" rx="19" fill="#10213D"/>
+  <path d="M43 20C40 16 34 15 29 17C23 19 22 25 27 28L37 33C43 36 42 43 36 46C30 49 23 47 20 43" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M15 33H24L28 27L34 38L38 32H49" stroke="#FF625A" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g><text x="84" y="53" font-family="Segoe UI,Arial,sans-serif" font-size="44" font-weight="700" letter-spacing="-1.8" fill="#10213D">Sahay</text></svg>

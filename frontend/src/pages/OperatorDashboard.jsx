@@ -140,7 +140,7 @@ export default function OperatorDashboard() {
 
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink/60">
           Register ambulances, capture their equipment and crew details,
-          and make verified fleet capacity available to JeevanSetu dispatch.
+          and make verified fleet capacity available to Sahay dispatch.
         </p>
       </div>
 

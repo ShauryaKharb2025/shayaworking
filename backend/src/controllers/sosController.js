@@ -1,4 +1,4 @@
-const axios = require("axios");
+const { kickOrchestration } = require("../services/autoDispatchService");
 const Trip = require("../models/Trip");
 const CoverageZone = require("../models/CoverageZone");
 
@@ -45,40 +45,6 @@ async function checkCoverage(lng, lat) {
   return "coming_soon";
 }
 
-/**
- * POST /api/sos
- *
- * Body:
- * {
- *   lng,
- *   lat,
- *   address,
- *   channel,
- *   symptoms: [string]
- * }
- *
- * HYBRID DISPATCH FLOW:
- *
- * SOS
- *   ↓
- * Coverage check
- *   ↓
- * AI triage
- *   ↓
- * requested
- *   ↓
- * Dispatcher queue
- *   ↓
- * Dispatcher can manually assign
- *   ↓
- * If not assigned within 5 minutes:
- * automatic dispatch service handles fallback
- *
- * IMPORTANT:
- * This controller does NOT assign an ambulance immediately.
- * Manual dispatch is handled by dispatchController.js.
- * Automatic fallback will be handled separately.
- */
 async function createSOS(req, res) {
   try {
     const {
@@ -88,6 +54,8 @@ async function createSOS(req, res) {
       channel = "app",
       symptoms = [],
       requestedAmbulanceTier,
+      requiredEquipment = [],
+      requiredSpecialties = [],
     } = req.body;
 
     // ---------------------------------------------------------
@@ -107,6 +75,11 @@ async function createSOS(req, res) {
     if (!Array.isArray(symptoms) || symptoms.some(value => typeof value !== "string") ||
         (requestedAmbulanceTier && !["ALS", "BLS"].includes(requestedAmbulanceTier))) {
       return res.status(400).json({message:"Provide symptoms as text and an ALS or BLS preference."});
+    }
+    const validRequirements = rows => Array.isArray(rows) && rows.length <= 20 &&
+      rows.every(value => typeof value === "string" && value.trim().length > 0 && value.length <= 80);
+    if (!validRequirements(requiredEquipment) || !validRequirements(requiredSpecialties)) {
+      return res.status(400).json({ message: "Invalid equipment or specialty requirements." });
     }
     const coverage = await checkCoverage(lng, lat);
 
@@ -134,6 +107,7 @@ const trip = await Trip.create({
   },
 
   address,
+  triage: { suggestedEquipment: requiredEquipment.map(item => item.trim()), requiredSpecialties: requiredSpecialties.map(item => item.trim()) },
 
   coverageState:
     coverage === "coming_soon"
@@ -144,54 +118,9 @@ const trip = await Trip.create({
     ? "requested"
     : "waitlisted",
 
-  // Dispatcher gets 5 minutes to assign manually.
-  // After that, the auto-dispatch worker can take over.
-  autoDispatchAt: isCovered
-    ? new Date(Date.now() + 5 * 60 * 1000)
-    : null,
+  autoDispatchAt: isCovered ? new Date() : null,
+  events: [{ type: "sos:received", at: new Date().toISOString() }],
 });
-    // ---------------------------------------------------------
-    // 4. AI/ML triage
-    //
-    // Triage happens before dispatch.
-    // The result is stored on the trip so the dispatcher
-    // and automatic dispatch service can use it later.
-    // ---------------------------------------------------------
-
-    if (
-      process.env.AI_SERVICE_URL && symptoms.length &&
-      (coverage === "live" || coverage === "limited")
-    ) {
-      try {
-        const { data } = await axios.post(
-          `${process.env.AI_SERVICE_URL}/triage`,
-          { symptoms }, { timeout: 5000 }
-        );
-
-        trip.triage = {
-          urgencyTier: data.urgency_tier,
-          suggestedEquipment: data.suggested_equipment,
-          suggestedAmbulanceTier: data.suggested_ambulance_tier,
-          notes: data.notes,
-        };
-
-        await trip.save();
-      } catch (aiErr) {
-        // Triage failure should NOT cancel the emergency request.
-        // The trip remains valid and can still be dispatched.
-        console.warn(
-          "[sos] triage service unavailable, continuing without it:",
-          aiErr.message
-        );
-      }
-    }
-
-    // ---------------------------------------------------------
-    // 5. Area not covered
-    //
-    // Keep your existing waitlist behaviour.
-    // ---------------------------------------------------------
-
     if (coverage === "coming_soon") {
       return res.status(201).json({
         trip,
@@ -202,34 +131,6 @@ const trip = await Trip.create({
         parallelChannels: ["official_helpline_112"],
       });
     }
-
-    // ---------------------------------------------------------
-    // 6. IMPORTANT:
-    //
-    // DO NOT FIND AN AMBULANCE HERE.
-    //
-    // Previously this controller:
-    //
-    //     found nearest ambulance
-    //     changed ambulance.status
-    //     attached ambulance to trip
-    //     changed trip to matched
-    //     calculated ETA
-    //
-    // That caused the dispatcher flow to break because
-    // dispatchController.js then saw:
-    //
-    //     trip.ambulance already exists
-    //
-    // and rejected manual assignment.
-    //
-    // Now the trip stays:
-    //
-    //     status    = "requested"
-    //     ambulance = null
-    //
-    // This gives the dispatcher the first opportunity to assign.
-    // ---------------------------------------------------------
 
     const io = req.app.get("io");
 
@@ -249,11 +150,10 @@ const trip = await Trip.create({
     // 8. Return request to frontend
     // ---------------------------------------------------------
 
+    res.once("finish", () => kickOrchestration(io));
     return res.status(201).json({
       trip,
-
-      message:
-        "Emergency request received and sent to the dispatcher queue.",
+      message: "Emergency request received. Finding an available ambulance.",
 
       parallelChannels: ["official_helpline_112"],
     });
@@ -301,9 +201,10 @@ async function getTrip(req, res, next) {
       where: { tripId: trip._id, status: { in: ["proposed", "accepted"] } },
       select: { status: true, hospital: { select: { name: true } } },
     });
-    const result = { ...trip.toJSON(), proposedHospital: referral?.hospital || null };
+    const publicEvents = trip.events.map(({ _id, type, at }) => ({ _id, type, at }));
+    const result = { ...trip.toJSON(), events: publicEvents, proposedHospital: referral?.hospital || null };
     if (trip.status === "offered" && req.user.role === "patient") {
-      return res.json({ trip: { ...result, ambulance: null, events: trip.events.filter(event => !["ambulance:offered", "ambulance:auto_offered"].includes(event.type)) } });
+      return res.json({ trip: { ...result, ambulance: null, events: publicEvents.filter(event => !["ambulance:offered", "ambulance:auto_offered"].includes(event.type)) } });
     }
     return res.json({ trip: result });
   } catch (error) {

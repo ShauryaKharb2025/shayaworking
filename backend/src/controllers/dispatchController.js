@@ -1,3 +1,4 @@
+const { kickOrchestration } = require("../services/autoDispatchService");
 const prisma = require("../data/prisma");
 const { ambulanceCandidates, distanceKm } = require("../services/matching");
 const Trip = require("../models/Trip");
@@ -364,7 +365,7 @@ async function assignAmbulance(req, res) {
      * cancels the automatic-dispatch timer.
      */
 
-    trip.autoDispatchAt = null;
+    trip.autoDispatchAt = new Date(Date.now() + 60_000);
 
     /*
      * ==========================
@@ -793,9 +794,15 @@ async function updateAmbulanceLocation(
         ? (await prisma.hospital.findUnique({ where: { id: trip.hospital } }))?.location.coordinates
         : trip.pickupLocation.coordinates;
       if (target && ["dispatched", "en_route", "en_route_hospital"].includes(trip.status)) {
+        const etaMinutes = Math.ceil(distanceKm([numericLng, numericLat], target) * 2);
+        const lastEta = trip.events.findLast(row => row.type === "journey:eta_updated");
+        const significant = Math.abs(etaMinutes - (lastEta?.payload?.etaMinutes ?? trip.etaMinutes ?? etaMinutes)) >= 5 &&
+          (!lastEta || Date.now() - new Date(lastEta.at) >= 30_000);
         await prisma.trip.updateMany({
-          where: { id: trip._id, status: trip.status },
-          data: { etaMinutes: Math.ceil(distanceKm([numericLng, numericLat], target) * 2), version: { increment: 1 } },
+          where: { id: trip._id, version: trip._version },
+          data: { etaMinutes, version: { increment: 1 }, ...(significant ? { events: [...trip.events, {
+            _id: require("node:crypto").randomUUID(), type: "journey:eta_updated", at: new Date().toISOString(), payload: { etaMinutes },
+          }] } : {}) },
         });
       }
       io?.to(`trip:${trip._id}`).emit(
@@ -836,6 +843,7 @@ async function updateTripStatus(
 ) {
   try {
     let releaseAmbulance = false;
+    res.once("finish", () => { if (res.statusCode < 300) kickOrchestration(req.app.get("io")); });
     const {
       status,
       hospital,
@@ -930,14 +938,15 @@ async function updateTripStatus(
       (role === "hospital" && receivingAccount?.hospital && receivingAccount.hospital === trip.hospital &&
         trip.status === "arrived_hospital" && status === "handed_off");
     if (!allowed || hospital !== undefined) return res.status(403).json({ message: "Transition is not authorized" });
-    if (status === "en_route_hospital" && !trip.hospital) {
+    if (status === "en_route_hospital" && (!trip.hospital ||
+      !(await prisma.hospital.findUnique({ where: { id: trip.hospital } }))?.receivingReady)) {
       return res.status(409).json({ message: "A confirmed destination is required" });
     }
     if (status === "rejected") {
       const vehicleId = trip.ambulance;
       trip.ambulance = null;
       trip.status = "requested";
-      trip.autoDispatchAt = new Date(Date.now() + 300_000);
+      trip.autoDispatchAt = new Date();
       trip.events.push({ type: "ambulance:rejected", actorId: req.user.sub, at: new Date(), payload: { vehicleId } });
       await require("../data/repository").transaction(async () => {
         await trip.save();
@@ -949,6 +958,7 @@ async function updateTripStatus(
       return res.json({ trip });
     }
     if (status === "dispatched") {
+      trip.autoDispatchAt = null;
       trip.dispatchedAt = new Date();
       const vehicle = await Ambulance.findById(trip.ambulance);
       trip.etaMinutes = Math.ceil(distanceKm(vehicle.location.coordinates, trip.pickupLocation.coordinates) * 2);

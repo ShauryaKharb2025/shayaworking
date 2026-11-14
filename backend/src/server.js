@@ -39,7 +39,7 @@ app.use(morgan("dev"));
 
 // Basic rate limiting on the SOS endpoint - it's the most sensitive one
 const sosLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 });
-app.use("/api/sos", sosLimiter);
+app.post("/api/sos", sosLimiter);
 
 app.get("/api/health", (req, res) => res.json({ status: "ok", service: "sahay-backend" }));
 

@@ -5,7 +5,7 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const { ambulanceCandidates, hospitalCandidates } = require("../services/matching");
 const { explain } = require("../services/geminiIntelligence");
 
-router.use(requireAuth, requireRole("dispatcher", "admin"));
+router.use(requireAuth, requireRole("admin"));
 router.use(rateLimit({ windowMs: 60_000, max: 40, keyGenerator: req => req.user.sub }));
 
 const inputs = {

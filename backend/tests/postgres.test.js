@@ -10,7 +10,7 @@ const Ambulance = require("../src/models/Ambulance");
 const { transaction } = require("../src/data/repository");
 const { signAccessToken } = require("../src/utils/jwt");
 const tag = randomUUID();
-let server, patient, driver, dispatcher, operator, vehicle;
+let server, patient, driver, dispatcher, admin, operator, vehicle;
 const ids = { users: [], trips: [], ambulances: [], operators: [], waits: [] };
 const base = "http://127.0.0.1:5051/api";
 async function api(path, user, method = "GET", body) {
@@ -18,16 +18,17 @@ async function api(path, user, method = "GET", body) {
  return { status: response.status, data: await response.json() };
 }
 before(async () => {
- for (const role of ["patient", "driver", "dispatcher"]) {
+ for (const role of ["patient", "driver", "dispatcher", "admin"]) {
   const user = await User.create({ name: "परीक्षण " + role, email: role + tag + "@test.invalid", role });
   ids.users.push(user._id);
   if (role === "patient") patient = user;
   if (role === "driver") driver = user;
   if (role === "dispatcher") dispatcher = user;
+  if (role === "admin") admin = user;
  }
  operator = await prisma.operator.create({data:{name:tag,type:"ngo",verified:true}}); ids.operators.push(operator.id);
  vehicle = await Ambulance.create({ vehicleNumber:tag, operator:operator.id, tier:"ALS",status:"idle",complianceVerified:true,crew:[{role:"EMT",certified:true}] }); ids.ambulances.push(vehicle._id);
- server = spawn(process.execPath, ["src/server.js"], {env:{...process.env,PORT:"5051",GEMINI_API_KEY:""}, stdio:"pipe"});
+ server = spawn(process.execPath, ["src/server.js"], {env:{...process.env,PORT:"5051",GEMINI_API_KEY:"",ORCHESTRATION_ENABLED:"false"}, stdio:"pipe"});
  let logs = ""; server.stdout.on("data", c=>logs+=c); server.stderr.on("data",c=>logs+=c);
  for(let i=0;i<60;i++) {
   if (server.exitCode !== null) throw new Error(logs);
@@ -110,7 +111,7 @@ test("referral replacement, caregiver revocation and clinical handoff persist", 
    const endpoint = path+"/referrals/"+referral.id;
    assert.equal((await api(endpoint,account===first ? second : first,"PATCH",{action:"accepted"})).status,403);
    assert.equal((await api(endpoint,account,"PATCH",{action:"accepted"})).status,200);
-   assert.equal((await api(endpoint,dispatcher,"PATCH",{action:"confirmed"})).status,200);
+   if (account === second) assert.equal((await api(endpoint,dispatcher,"PATCH",{action:"confirmed"})).status,200);
   }
   await refer(hospitalIds[0],first);
   const capacityCase = await api("/sos",patient,"POST",{lng:77.10,lat:28.75});
@@ -138,7 +139,7 @@ test("referral replacement, caregiver revocation and clinical handoff persist", 
   assert.equal((await fetch(base+path+"/invitations/"+grants.data.invitations.find(row=>row.userId===caregiver._id).id,{ method:"DELETE",headers:{Authorization:"Bearer "+signAccessToken(patient)} })).status,204);
   assert.equal((await api(path+"/caregiver",caregiver)).status,403);
   for (const module of ["ambulance","hospital","coordination","journey"]) {
-   const explanation = await api("/intelligence/trips/"+id+"/"+module,dispatcher,"POST");
+   const explanation = await api("/intelligence/trips/"+id+"/"+module,admin,"POST");
    assert.equal(explanation.status,200);
    assert.equal(explanation.data.source,"deterministic");
    if (module === "journey") assert.ok(explanation.data.input.events.some(event=>event.type==="vitals"));

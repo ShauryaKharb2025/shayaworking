@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { connectSocket } from "../api/socket";
-import DispatchIntelligence from "../components/DispatchIntelligence";
+import { DispatchCaseOperations } from "../components/CaseWorkflow";
 import GoogleMap from "../components/GoogleMap";
 
 export default function DispatcherDashboard() {
@@ -422,7 +422,7 @@ export default function DispatcherDashboard() {
         </div>
       )}
 
-      <DispatchIntelligence trips={trips} />
+      <DispatchCaseOperations trips={trips} />
 
       {/* Fleet summary */}
 

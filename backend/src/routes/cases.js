@@ -3,7 +3,8 @@ const { createHash, randomBytes, randomUUID } = require("node:crypto");
 const db = require("../data/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { hospitalCandidates, distanceKm } = require("../services/matching");
-const { explain } = require("../services/geminiIntelligence");
+const { eventsForJourney, fingerprint } = require("../services/journey");
+const { kickOrchestration } = require("../services/autoDispatchService");
 
 router.use(requireAuth);
 const dispatch = requireRole("dispatcher", "admin");
@@ -46,6 +47,7 @@ function notify(req, trip, hospitalId) {
   if (trip.ambulance?.driverId) rooms = rooms?.to(`driver:${trip.ambulance.driverId}`);
   for (const id of new Set([hospitalId, trip.hospitalId].filter(Boolean))) rooms = rooms?.to(`hospital:${id}`);
   rooms?.emit("case:refresh", { tripId: trip.id });
+  kickOrchestration(io);
 }
 
 router.get("/:id/destinations", dispatch, route(async (req, res) => {
@@ -62,7 +64,7 @@ router.post("/:id/referrals", dispatch, route(async (req, res) => {
     const trip = await findTrip(tx, req.params.id);
     active(trip);
     const hospital = await tx.hospital.findUnique({ where: { id: String(req.body.hospitalId) } });
-    if (!hospital?.receivingReady || hospital.bedsAvailable <= 0) fail(409, "Hospital is unavailable");
+    if (!hospital || !hospitalCandidates(trip, [hospital])[0].eligible) fail(409, "Hospital is unavailable");
     if (trip.hospitalId === hospital.id) fail(409, "This destination is already confirmed");
     const pending = await tx.hospitalReferral.findFirst({ where: { tripId: trip.id, status: { in: ["proposed", "accepted"] } } });
     if (pending) fail(409, "Resolve the existing referral first");
@@ -93,14 +95,21 @@ router.patch("/:id/referrals/:referralId", requireRole("hospital", "dispatcher",
     if (!referral) fail(404, "Referral not found");
     const hospitalActor = req.user.role === "hospital";
     let update = {};
+    let nextStatus = action;
     if (hospitalActor && req.account.hospitalId === referral.hospitalId &&
         referral.status === "proposed" && ["accepted", "rejected"].includes(action)) {
       if (action === "accepted") {
+        const candidate = await tx.hospital.findUnique({ where: { id: referral.hospitalId } });
+        if (!candidate || !hospitalCandidates(trip, [candidate])[0].eligible) fail(409, "Hospital is unavailable or incompatible");
         const reservation = await tx.hospital.updateMany({
-          where: { id: referral.hospitalId, bedsAvailable: { gt: 0 }, receivingReady: true },
+          where: { id: referral.hospitalId, bedsAvailable: { gt: 0 }, receivingReady: true, version: candidate.version },
           data: { bedsAvailable: { decrement: 1 }, version: { increment: 1 } },
         });
         if (!reservation.count) fail(409, "Hospital has no receiving capacity");
+        if (!trip.hospitalId) {
+          nextStatus = "confirmed";
+          update = { hospitalId: referral.hospitalId };
+        }
       }
     } else if (!hospitalActor && action === "withdrawn" && ["proposed", "accepted"].includes(referral.status)) {
       if (referral.status === "accepted") {
@@ -120,9 +129,13 @@ router.patch("/:id/referrals/:referralId", requireRole("hospital", "dispatcher",
     } else {
       fail(403, "Referral action is not authorized");
     }
-    const changed = await tx.hospitalReferral.updateMany({ where: { id: referral.id, status: referral.status }, data: { status: action } });
+    const changed = await tx.hospitalReferral.updateMany({ where: { id: referral.id, status: referral.status }, data: { status: nextStatus } });
     if (!changed.count) fail(409, "Referral changed. Refresh and retry.");
     await record(tx, trip, req, `hospital:${action}`, { hospitalId: referral.hospitalId, referralId: referral.id }, update);
+    if (nextStatus === "confirmed" && action === "accepted") {
+      const acceptedTrip = await findTrip(tx, trip.id);
+      await record(tx, acceptedTrip, req, "hospital:confirmed", { hospitalId: referral.hospitalId, referralId: referral.id });
+    }
     return { trip, referral };
   });
   notify(req, trip, referral.hospitalId);
@@ -201,12 +214,37 @@ router.get("/:id/caregiver", requireRole("patient", "caregiver"), route(async (r
   res.json(await caregiverJourney(req));
 }));
 
-router.post("/:id/caregiver/summary", require("express-rate-limit")({ windowMs: 60_000, max: 12, keyGenerator: req => req.user.sub }), requireRole("patient", "caregiver"), route(async (req, res) => {
-  const journey = await caregiverJourney(req);
-  const input = { events: journey.events.slice(-30).map(({ type, at }, index) => ({ ref: String(index + 1), type, at })) };
-  const summary = await explain("journey", input);
-  await caregiverJourney(req);
-  res.json(summary);
+async function journeyData(trip, observations, caregiver = false) {
+  const projection = await db.journeyProjection.findUnique({ where: { tripId: trip.id } });
+  const events = eventsForJourney(trip, observations);
+  const shared = eventsForJourney(trip, observations.filter(row => row.familyVisible));
+  const refs = projection?.fingerprint === fingerprint(shared) ? projection.summary.highlights : [];
+  const visible = events.filter(row => !caregiver || !row.type.startsWith("ambulance:") || row.type === "ambulance:accepted");
+  return {
+    status: trip.status,
+    events: visible,
+    observations,
+    highlights: visible.filter(row => refs.includes(row.id)),
+    coordination: projection?.fingerprint === fingerprint(shared) ? projection.coordination : null,
+  };
+}
+
+router.get("/:id/journey", route(async (req, res) => {
+  const trip = await findTrip(db, req.params.id);
+  const role = req.user.role;
+  const own = role === "patient" && trip.patientId === req.user.sub;
+  const staff = ["hospital", "clinician"].includes(role) && req.account.hospitalId && req.account.hospitalId === trip.hospitalId;
+  const driver = role === "driver" && trip.ambulance?.driverId === req.user.sub && !terminal.includes(trip.status);
+  const dispatch = ["dispatcher", "admin"].includes(role);
+  const grant = !own && !staff && !driver && !dispatch && await db.caregiverAccess.findFirst({
+    where: { tripId: trip.id, userId: req.user.sub, revokedAt: null, expiresAt: { gt: new Date() } },
+  });
+  if (!own && !staff && !driver && !dispatch && !grant) fail(403, "Case access required");
+  const observations = await db.clinicalObservation.findMany({
+    where: { tripId: trip.id, ...(grant ? { familyVisible: true } : own || staff ? {} : { familyVisible: true }) },
+    select: { id: true, type: true, note: true, createdAt: true, familyVisible: true },
+  });
+  res.json(await journeyData(trip, observations, !!grant));
 }));
 
 async function clinicianCase(req) {
@@ -228,7 +266,7 @@ router.post("/:id/observations", requireRole("clinician", "driver"), route(async
   const trip = await clinicianCase(req);
   active(trip);
   const { type, note, familyVisible } = req.body;
-  if (!["assessment", "vitals", "intervention_observed"].includes(type) || typeof note !== "string" ||
+  if (!["assessment", "vitals", "intervention_observed", "equipment_used", "handoff_observation"].includes(type) || typeof note !== "string" ||
       !note.trim() || note.length > 2000) fail(400, "Observation type and note are required");
   const observation = await db.clinicalObservation.create({
     data: { tripId: trip.id, actorId: req.user.sub, type, note: note.trim(), familyVisible: familyVisible === true },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../api/axios";
+import { connectSocket } from "../api/socket";
 
 export function useCaseResource(path, period = 0) {
   const [data, setData] = useState(null);
@@ -40,6 +41,80 @@ function useAction(reload) {
     }
   }
   return { error, pending, run };
+}
+
+const coordinationLabels = {
+  finding_ambulance: "Finding an available ambulance",
+  review_availability: "Reviewing fleet availability",
+  awaiting_driver: "Awaiting driver acknowledgement",
+  monitor_acknowledgement: "Monitoring the dispatch offer",
+  preparing_pickup: "Preparing for pickup",
+  monitor_pickup: "Ambulance travelling to pickup",
+  review_pickup_eta: "Reviewing the estimated pickup time",
+  awaiting_pickup: "Ambulance at pickup",
+  prepare_transport: "Preparing for transport",
+  monitor_transport: "Travelling to the receiving hospital",
+  awaiting_handoff: "Awaiting hospital handoff",
+  handoff_recorded: "Hospital handoff recorded",
+  case_cancelled: "Emergency request cancelled",
+};
+
+function eventLabel(type) {
+  const labels = {
+    "sos:received": "Emergency request received",
+    "ambulance:auto_offered": "Recommended ambulance offered to driver",
+    "ambulance:offer_expired": "Driver acknowledgement window expired",
+    "hospital:automatically_proposed": "Recommended hospital sent a receiving request",
+    "hospital:referral_expired": "Hospital acknowledgement window expired",
+    "hospital:referral_unavailable": "Hospital referral withdrawn after availability changed",
+    "status:dispatched": "Driver accepted the offer",
+  };
+  return labels[type] || type.replace(/^(status:|observation:)/, "").replace(/[:_]/g, " ");
+}
+
+export function JourneyLog({ caseId }) {
+  const { data, error, load } = useCaseResource(`/cases/${caseId}/journey`, 4000);
+  useEffect(() => {
+    const socket = connectSocket();
+    const refresh = event => { if (event?.tripId === caseId) load(); };
+    socket.on("case:refresh", refresh);
+    socket.on("trip:status", refresh);
+    return () => {
+      socket.off("case:refresh", refresh);
+      socket.off("trip:status", refresh);
+    };
+  }, [caseId, load]);
+  if (error) return <p role="alert">{error}</p>;
+  if (!data) return <p role="status">Loading emergency activity…</p>;
+  const list = events => <ol className="space-y-1">{events.map(row => <li key={row.id}>
+    <time dateTime={row.at}>{new Date(row.at).toLocaleString()}</time> · {eventLabel(row.type)}
+  </li>)}</ol>;
+  return <section className="my-4 rounded-xl border p-4">
+    <h2>Emergency journey and logs</h2>
+    <p>{coordinationLabels[data.coordination] || eventLabel(data.status)}</p>
+    {data.highlights.length > 0 && <>
+      <h3>{data.status === "handed_off" ? "Final case summary" : "Journey highlights"}</h3>
+      {list(data.highlights)}
+    </>}
+    <h3>Recorded activity</h3>
+    {list(data.events)}
+    <h3>Treatment observations</h3>
+    {data.observations.length === 0 ? <p>No treatment information has been recorded yet.</p> :
+      <ul>{data.observations.map(row => <li key={row.id}>
+        <time dateTime={row.createdAt}>{new Date(row.createdAt).toLocaleString()}</time> · {eventLabel(row.type)} · {row.note}
+      </li>)}</ul>}
+  </section>;
+}
+
+export function DispatchCaseOperations({ trips }) {
+  const [selection, setSelection] = useState("");
+  return <section className="my-4 rounded-xl border p-4">
+    <label>Emergency case <select value={selection} onChange={event => setSelection(event.target.value)}>
+      <option value="">Select a case</option>
+      {trips.map(row => <option key={row._id} value={row._id}>{row.patient?.name || row._id}</option>)}
+    </select></label>
+    {selection && <><Destinations key={selection} tripId={selection} /><JourneyLog key={"log-" + selection} caseId={selection} /></>}
+  </section>;
 }
 
 export function Destinations({ tripId }) {
@@ -84,6 +159,7 @@ export function HospitalReferrals() {
           action.run("patch", `/cases/${row.tripId}/referrals/${row.id}`, { action: status })}>
           {status === "accepted" ? "Accept referral" : "Reject referral"}
         </button>)}
+      {row.status === "confirmed" && <details><summary>Emergency activity log</summary><JourneyLog caseId={row.tripId} /></details>}
       {row.status === "confirmed" && row.trip.status === "arrived_hospital" &&
         <button disabled={action.pending} onClick={() =>
           action.run("patch", `/dispatch/trip/${row.tripId}/status`, { status: "handed_off" })}>Record handoff</button>}
@@ -142,8 +218,6 @@ export function CaregiverDashboard() {
 function FamilyJourney({ caseId }) {
   const path = `/cases/${caseId}/caregiver`;
   const { data, error } = useCaseResource(path, 6000);
-  const action = useAction(async () => {});
-  const [summary, setSummary] = useState(null);
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p role="status">Loading journey…</p>;
   const coordinates = data.ambulance?.location?.coordinates;
@@ -158,11 +232,7 @@ function FamilyJourney({ caseId }) {
       <p>Crew {data.ambulance.crew.map(row => row.role + (row.certified ? " (certified)" : "")).join(", ")}</p>
       {coordinates && <p>Last location {coordinates[1]}, {coordinates[0]}</p>}
     </>}
-    <ul>{data.events.map((event, index) => <li key={index}>{new Date(event.at).toLocaleString()} · {event.type.replace("status:", "").replaceAll("_", " ")}</li>)}</ul>
-    <ul>{data.observations.map((row, index) => <li key={index}>{row.type} · {row.note}</li>)}</ul>
-    <button disabled={action.pending} onClick={async () => setSummary(await action.run("post", path + "/summary"))}>Summarize journey</button>
-    {action.error && <p role="alert">{action.error}</p>}
-    {summary && <p>{summary.source === "gemini" ? "Gemini · " + summary.output.summary : "Gemini unavailable. Recorded updates are shown above."}</p>}
+    <JourneyLog caseId={caseId} />
   </section>;
 }
 
@@ -184,6 +254,7 @@ export function ClinicalObservations({ caseId }) {
         <label>Observation type <select value={type} onChange={event => setType(event.target.value)}>
           <option value="assessment">Assessment</option><option value="vitals">Vitals</option>
           <option value="intervention_observed">Observed intervention</option>
+          <option value="equipment_used">Equipment used</option><option value="handoff_observation">Handoff observation</option>
         </select></label>
         <label>Observation <textarea required value={note} maxLength={2000} onChange={event => setNote(event.target.value)} /></label>
         <label><input type="checkbox" checked={familyVisible} onChange={event => setFamilyVisible(event.target.checked)} /> Share with invited family</label>
@@ -203,6 +274,6 @@ export function ClinicianDashboard() {
       <label>Case ID <input required value={draft} onChange={event => setDraft(event.target.value)} /></label>
       <button>Open case</button>
     </form>
-    {caseId && <ClinicalObservations key={caseId} caseId={caseId} />}
+    {caseId && <><ClinicalObservations key={caseId} caseId={caseId} /><JourneyLog key={"log-" + caseId} caseId={caseId} /></>}
   </main>;
 }

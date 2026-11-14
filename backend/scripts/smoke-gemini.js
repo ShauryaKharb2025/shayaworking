@@ -3,27 +3,13 @@ require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const { explain } = require("../src/services/geminiIntelligence");
 
 const synthetic = {
-  ambulance: {
-    candidates: [
-      { ref: "1", tier: "ALS", eligible: true, reasons: [], distanceKm: 3 },
-      { ref: "2", tier: "BLS", eligible: false, reasons: ["ALS required"], distanceKm: 1 },
-    ],
-  },
-  hospital: {
-    hospitals: [
-      { ref: "1", eligible: true, bedsAvailable: 2, distanceKm: 5 },
-      { ref: "2", eligible: false, bedsAvailable: 0, distanceKm: 3 },
-    ],
-  },
-  coordination: {
-    status: "en_route", simulatedEtaMinutes: 6, hasConfirmedDestination: false,
-  },
-  journey: {
-    events: [
-      { ref: "1", type: "status:en_route", at: "2026-01-01T10:00:00Z" },
-      { ref: "2", type: "vitals", at: "2026-01-01T10:05:00Z" },
-    ],
-  },
+  ambulanceDecision: { candidates: [{ id: "vehicle-1", tier: "ALS", simulatedPickupMinutes: 4 }, { id: "vehicle-2", tier: "ALS", simulatedPickupMinutes: 7 }],
+    reasonCodes: ["pickup_eta", "gps_freshness", "capability"] },
+  hospitalDecision: { candidates: [{ id: "hospital-1", bedsAvailable: 2, simulatedTravelMinutes: 8 }, { id: "hospital-2", bedsAvailable: 4, simulatedTravelMinutes: 10 }],
+    reasonCodes: ["travel_eta", "capacity", "specialty"] },
+  coordinationDecision: { status: "en_route", simulatedEtaMinutes: 6, allowedActions: ["monitor_pickup", "review_pickup_eta"] },
+  journeyDigest: { events: [{ id: "event-1", type: "sos:received", at: "2026-01-01T10:00:00Z" },
+    { id: "event-2", type: "status:dispatched", at: "2026-01-01T10:05:00Z" }] },
 };
 
 async function main() {
@@ -33,8 +19,9 @@ async function main() {
     return;
   }
   await Promise.all(Object.entries(synthetic).map(async ([module, input]) => {
+    const started = performance.now();
     const result = await explain(module, input);
-    console.log(module + ": " + (result.source === "gemini" ? "validated Gemini response" : "Gemini unavailable"));
+    console.log(module + ": " + (result.source === "gemini" ? "validated Gemini response" : "fallback") + " (" + Math.round(performance.now() - started) + " ms)");
     if (result.source !== "gemini") process.exitCode = 1;
   }));
 }

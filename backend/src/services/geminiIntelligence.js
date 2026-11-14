@@ -1,6 +1,28 @@
 const text = { type: "string" };
 const list = { type: "array", items: text, maxItems: 8 };
 const modules = {
+  ambulanceDecision: {
+    prompt: "Rank verified ambulance candidates for pickup. Use only supplied IDs. Prefer reliable GPS and short pickup times; consider verified capability. Give the chosen ID, its ranked alternatives and one reason code: pickup_eta, gps_freshness, or capability.",
+    fields: { chosenId: text, rankedIds: list, reasonCode: text },
+    refs: "rankedIds",
+    allowed: input => input.candidates.map(row => row.id),
+  },
+  hospitalDecision: {
+    prompt: "Rank compatible hospitals for receiving this emergency. Consider travel time, available capacity and specialties. Give the chosen ID, ranked alternatives and one reason code: travel_eta, capacity, or specialty.",
+    fields: { chosenId: text, rankedIds: list, reasonCode: text },
+    refs: "rankedIds",
+    allowed: input => input.candidates.map(row => row.id),
+  },
+  coordinationDecision: {
+    prompt: "Choose one operational action code from the supplied allowedActions. Do not infer state or clinical information.",
+    fields: { action: text },
+  },
+  journeyDigest: {
+    prompt: "Choose the most useful recorded milestones for a chronological emergency journey digest, citing their exact IDs. Do not generate any medical or operational claims.",
+    fields: { evidenceRefs: list },
+    refs: "evidenceRefs",
+    allowed: input => input.events.map(row => row.id),
+  },
   ambulance: {
     prompt: "Explain the deterministic ambulance ranking and acknowledge exclusions. Do not state that a vehicle was dispatched.",
     fields: { explanation: text, candidateRefs: list },
@@ -41,6 +63,10 @@ function validateOutput(spec, input, raw) {
       throw new Error("Missing or unknown evidence reference");
     }
   }
+  if (output.rankedIds && (output.chosenId !== output.rankedIds[0] ||
+      new Set(output.rankedIds).size !== output.rankedIds.length ||
+      !input.reasonCodes.includes(output.reasonCode))) throw new Error("Invalid ranking");
+  if (output.action && !input.allowedActions.includes(output.action)) throw new Error("Invalid coordination action");
   return output;
 }
 
@@ -55,7 +81,7 @@ async function defaultGenerate(request, apiKey) {
   return response.text;
 }
 
-async function explain(module, input, generate, timeoutMs = 15000) {
+async function explain(module, input, generate, timeoutMs = Math.min(15000, Math.max(250, Number(process.env.GEMINI_OPERATION_TIMEOUT_MS) || 5000))) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!generate && !apiKey) return { source: "deterministic", reason: "disabled" };
   const spec = modules[module];
@@ -76,6 +102,9 @@ async function explain(module, input, generate, timeoutMs = 15000) {
         ? { ...list, minItems: 1, items: { ...text, enum: allowed } }
         : { ...list, maxItems: 0 };
     }
+    if (spec.fields.chosenId) properties.chosenId = { ...text, enum: spec.allowed(input) };
+    if (spec.fields.reasonCode) properties.reasonCode = { ...text, enum: input.reasonCodes };
+    if (spec.fields.action) properties.action = { ...text, enum: input.allowedActions };
     const request = {
       model,
       contents: JSON.stringify(input),

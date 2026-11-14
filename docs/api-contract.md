@@ -22,9 +22,16 @@ Paths are relative to `/api`. Unless marked public, send an access token as `Aut
 | Family invitation | GET/POST `/cases/:id/invitations`, DELETE `/cases/:id/invitations/:invitation` | Patient owner; POST accepts `email` and returns a one-time token and expiry. DELETE revokes the grant. |
 | Caregiver | POST `/cases/caregiver/redeem`, GET `/cases/caregiver/cases`, GET `/cases/:id/caregiver`, POST `/cases/:id/caregiver/summary` | Redeem with `token` from the matching account. Case-scoped views include approved milestones and family-visible observations. Read and summary require an active grant on every call. |
 | Clinician / EMT | GET/POST `/cases/:id/observations` | Clinician linked to confirmed hospital or certified assigned driver. POST takes `type`, `note`, `familyVisible`; returns recorded actor and timestamp. |
-| Intelligence | POST `/intelligence/trips/:id/{ambulance,hospital,coordination,journey}` | Dispatcher/admin. Inputs come from the database; no request data required. Returns input facts and `{source:"gemini", output}` or `{source:"deterministic", reason}`. |
+| Intelligence | POST `/intelligence/trips/:id/{ambulance,hospital,coordination,journey}` | Admin diagnostics. Inputs come from the database; no request data required. Returns input facts and `{source:"gemini", output}` or `{source:"deterministic", reason}`. |
 | Public coverage | GET `/coverage`, POST `/coverage/waitlist` | Returns `zones`; waitlist accepts contact preference, contact, consent and area. |
 
 Gemini output shapes are `{explanation,candidateRefs}`, `{comparison,hospitalRefs}`, `{progress,communicationNeeds}` and `{summary,evidenceRefs}`. Candidate and evidence references resolve only to the supplied input. Timeline inputs currently include observation type and time, with free-text notes kept out of Gemini.
 
 Socket.IO admits authenticated staff to their role/organisation room and checks case access for trip room joins. `dispatch:new`, `trip:assigned`, `trip:status`, `trip:location`, `case:refresh` and `hospital:pre_alert` trigger updates or re-fetches. Caregiver data is fetched through short polling that rechecks the grant on every request.
+
+
+## Automatic case operations
+
+Covered SOS requests receive a persisted case before the worker evaluates ambulances and hospitals in parallel. The optional `requiredEquipment` and `requiredSpecialties` arrays constrain matching. Pending offers expire after 60 seconds and rejected or expired vehicles are excluded for that case. The backend records the initial destination when the receiving hospital accepts; replacing a confirmed destination requires dispatcher approval.
+
+`GET /cases/:id/journey` returns role-scoped `status`, `events`, `observations`, `highlights`, and `coordination`. Generated highlights reference authoritative records by ID and are stored in a separate projection. An authorised caregiver uses the same endpoint with an active grant and receives only permitted observations. The manual caregiver summary endpoint and normal dashboard generation controls have been removed. `case:refresh` pushes updates to authorised case and staff rooms.

@@ -29,12 +29,14 @@ function ambulanceCandidates(trip, fleet) {
 }
 
 function hospitalCandidates(trip, hospitals) {
+  const required = Array.isArray(trip.triage?.requiredSpecialties) ? trip.triage.requiredSpecialties : [];
   return hospitals.map(hospital => ({
     id: hospital.id,
     label: hospital.name,
     specialties: hospital.specialties,
     bedsAvailable: hospital.bedsAvailable,
-    eligible: hospital.receivingReady && hospital.bedsAvailable > 0,
+    eligible: hospital.receivingReady && hospital.bedsAvailable > 0 &&
+      required.every(item => hospital.specialties.some(specialty => specialty.toLowerCase() === item.toLowerCase())),
     distanceKm: distanceKm(trip.ambulance?.location?.coordinates || trip.pickupLocation.coordinates, hospital.location.coordinates),
   })).sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.distanceKm - b.distanceKm || a.id.localeCompare(b.id));
 }

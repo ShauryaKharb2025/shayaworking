@@ -123,6 +123,8 @@ model Trip {
   referrals HospitalReferral[]
   caregiverAccess CaregiverAccess[]
   observations ClinicalObservation[]
+  journeyProjection JourneyProjection?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   version Int @default(0)
@@ -178,4 +180,13 @@ model ClinicalObservation {
   familyVisible Boolean @default(false)
   createdAt DateTime @default(now())
   @@index([tripId, createdAt])
+}
+
+model JourneyProjection {
+  tripId String @id
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fingerprint String
+  coordination String
+  summary Json
+  updatedAt DateTime @updatedAt
 }

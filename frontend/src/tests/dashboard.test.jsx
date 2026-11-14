@@ -12,7 +12,7 @@ vi.mock("../api/axios",()=>({default:{get:mocks.get,post:mocks.post}}));
 vi.mock("react-router-dom",async()=>({...await vi.importActual("react-router-dom"),useNavigate:()=>mocks.navigate}));
 vi.mock("../components/JourneyMap",()=>({default:({onPickup,preview})=><div aria-label="Journey map">{preview?"Sample map":"Case map"}{onPickup&&<button onClick={()=>onPickup({lat:28.65,lng:77.15})}>Choose pickup pin</button>}</div>}));
 const show=(node)=>(()=>render(<MemoryRouter>{node}</MemoryRouter>))();
-beforeEach(()=>{mocks.user=null;mocks.get.mockReset();mocks.post.mockReset();mocks.navigate.mockReset();mocks.get.mockResolvedValue({data:{trips:[]}})});
+beforeEach(()=>{mocks.user=null;mocks.get.mockReset();mocks.post.mockReset();mocks.navigate.mockReset();mocks.get.mockImplementation(async path=>({data:path.endsWith("/journey")?{status:"requested",events:[],highlights:[],observations:[]}: {trips:[]}}))});
 afterEach(cleanup);
 describe("SOS dashboard",()=>{
  it("labels anonymous sample data and redirects booking to sign-in without posting",()=>{

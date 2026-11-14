@@ -3,10 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios";
 import { connectSocket } from "../api/socket";
 import { useAuth } from "../context/AuthContext";
-import { CaregiverInvitations } from "../components/CaseWorkflow";
+import { CaregiverInvitations, JourneyLog } from "../components/CaseWorkflow";
 import JourneyMap from "../components/JourneyMap";
 import { Ambulance, ArrowRight, Building2, Check, CheckCircle2, ChevronRight, ClipboardList, Clock3, HeartPulse, LocateFixed, MapPin, Pill, ShieldCheck, Users } from "../components/Icons";
-const statusLabels={requested:"Awaiting dispatcher",offered:"Awaiting driver acceptance",picked_up:"Patient picked up",arrived_hospital:"Arrived at hospital",waitlisted:"Outside current coverage",matched:"Ambulance matched",dispatched:"Ambulance dispatched",en_route:"Ambulance en route",arrived_pickup:"Arrived at pickup",en_route_hospital:"Travelling to hospital",handed_off:"Handoff complete",cancelled:"Request cancelled"};
+const statusLabels={requested:"Finding an available ambulance",offered:"Awaiting driver acceptance",picked_up:"Patient picked up",arrived_hospital:"Arrived at hospital",waitlisted:"Outside current coverage",matched:"Ambulance matched",dispatched:"Ambulance dispatched",en_route:"Ambulance en route",arrived_pickup:"Arrived at pickup",en_route_hospital:"Travelling to hospital",handed_off:"Handoff complete",cancelled:"Request cancelled"};
 export default function PatientSOS() {
  const {user}=useAuth(), navigate=useNavigate(),{id}=useParams();
  const preview=!user;
@@ -99,6 +99,7 @@ export default function PatientSOS() {
    <aside className="sahay-case-column">
     <section className="sahay-card sahay-case-summary"><div><div><span className="sahay-muted">Case ID</span><h2>{preview?"SH-CARD-001":trip?trip._id:loading?"Loading…":"No active case"}</h2></div><span className="sahay-case-badge"><HeartPulse size={20}/>{preview?"ALS (Cardiac)":ambulance?.tier||"SOS"}</span></div><div className={"sahay-status "+(trip?.status==="cancelled"?"cancelled":"")}><span>i</span><b>Status:</b> {preview?"Ambulance En Route":loading?"Loading case…":statusLabels[trip?.status]||"Ready when you need help"}</div></section>
     <section className="sahay-card sahay-timeline"><h2><ClipboardList/> Response Timeline</h2><ol>{timeline.map(([title,description,at],i)=><li key={title} className={i<stage?"complete":i===stage?"current":""}><span className="sahay-timeline-node">{i<stage?<Check size={14}/>:null}</span><div><div><strong>{title}</strong><time>{preview?(i===0?"10:24 AM":i===1?"10:26 AM":i===2?"10:27 AM":"Pending"):time(at)}</time></div><p>{description}</p></div></li>)}</ol>{!preview&&<p className="sahay-timeline-foot">Updates refresh every 10 seconds. Pending milestones are not confirmations.</p>}</section>
+    {trip && canRequest && <JourneyLog key={"log-" + trip._id} caseId={trip._id} />}
     {trip && canRequest && <CaregiverInvitations key={trip._id} tripId={trip._id} />}
    </aside>
   </div>

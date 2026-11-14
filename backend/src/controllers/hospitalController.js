@@ -43,6 +43,7 @@ async function updateBeds(req, res, next) {
     const hospital = await Hospital.findByIdAndUpdate(req.params.id, { bedsAvailable, receivingReady, specialties }, { new: true });
     if (!hospital) return res.status(404).json({ message: "Hospital not found" });
     req.app.get("io")?.to("dispatcher").emit("case:refresh");
+    require("../services/autoDispatchService").kickOrchestration(req.app.get("io"));
     return res.json({ hospital });
   } catch (error) {
     next(error);

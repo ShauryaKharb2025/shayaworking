@@ -43,6 +43,38 @@ app.post("/api/sos", sosLimiter);
 
 app.get("/api/health", (req, res) => res.json({ status: "ok", service: "sahay-backend" }));
 
+app.get("/api/location/detect", async (req, res) => {
+  for (const url of ["https://freeipapi.com/api/json", "https://ipwho.is/"]) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
+      if (response.ok) {
+        const d = await response.json();
+        const lat = d.latitude;
+        const lng = d.longitude;
+        if (lat && lng) {
+          const address = [d.cityName || d.city, d.regionName || d.region, d.countryName || d.country].filter(Boolean).join(", ");
+          return res.json({ lat, lng, address: address || `${lat.toFixed(4)}, ${lng.toFixed(4)}` });
+        }
+      }
+    } catch {}
+  }
+  res.json({ lat: 28.6139, lng: 77.2090, address: "Connaught Place, New Delhi" });
+});
+
+app.get("/api/location/reverse", async (req, res) => {
+  const { lat, lng } = req.query;
+  if (!lat || !lng) return res.status(400).json({ message: "lat and lng required" });
+  try {
+    const response = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`, { signal: AbortSignal.timeout(2500) });
+    if (response.ok) {
+      const d = await response.json();
+      const parts = [d.locality || d.city || d.principalSubdivision, d.countryName].filter(Boolean);
+      if (parts.length) return res.json({ address: parts.join(", ") });
+    }
+  } catch {}
+  res.json({ address: `${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}` });
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/sos", sosRoutes);
 app.use("/api/dispatch", dispatchRoutes);

@@ -45,7 +45,7 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
    }
    map.current.fitBounds(L.latLngBounds(bounds).pad(.25),{maxZoom:13, animate:false});
   } else if(isRealPickup) {
-   map.current.setView(pickupPoint, 15);
+   map.current.flyTo(pickupPoint, 15, { duration: 0.8 });
   } else if(preview) {
    const bounds=[pickupPoint,vehicle,hospital];
    L.marker(vehicle,{icon:marker("vehicle","✚")}).addTo(layers.current).bindTooltip(tooltip("ALS-03 · sample ambulance"),{permanent:true,direction:"top"});

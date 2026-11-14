@@ -14,7 +14,7 @@ export default function PatientSOS() {
  const preview=!user;
  const canRequest=!user || user.role==="patient";
  const [trip,setTrip]=useState(null),[loading,setLoading]=useState(!!user),[error,setError]=useState(""),[busy,setBusy]=useState(false);
- const [address,setAddress]=useState(preview?"Patel Nagar, Delhi":""),[symptoms,setSymptoms]=useState(preview?"Cardiac Arrest / Acute Coronary Syndrome":""),[needs,setNeeds]=useState("ALS"),[pickup,setPickup]=useState(null),[medical,setMedical]=useState(false);
+ const [address,setAddress]=useState(""),[symptoms,setSymptoms]=useState(preview?"Cardiac Arrest / Acute Coronary Syndrome":""),[needs,setNeeds]=useState("ALS"),[pickup,setPickup]=useState(null),[medical,setMedical]=useState(false);
  const [selectedConditionId,setSelectedConditionId]=useState(preview?"cardiac-arrest":"");
  const [showFleet,setShowFleet]=useState(false);
  const currentCondition=CRITICAL_CONDITIONS.find(c=>c.id===selectedConditionId)||(preview?CRITICAL_CONDITIONS[0]:null);

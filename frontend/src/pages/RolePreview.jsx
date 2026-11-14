@@ -6,7 +6,7 @@ import { Ambulance, Building2, ClipboardList, Headphones, ShieldCheck, Stethosco
 
 const DEMO_USERS = {
   dispatcher: { email: "dispatcher@sahay.org", role: "dispatcher", label: "Dispatcher Console" },
-  driver: { email: "driver1@sewa-ambulance.org", role: "driver", label: "Driver Console" },
+  driver: { email: "driver.ramesh@sahay.local", role: "driver", label: "Driver Console" },
   hospital: { email: "hospital@sahay.org", role: "hospital", label: "Hospital ER Console" },
   operator: { email: "operator@sewa-ambulance.org", role: "operator", label: "Fleet Operator Portal" },
   clinician: { email: "clinician@sahay.org", role: "clinician", label: "Clinician Dashboard" },

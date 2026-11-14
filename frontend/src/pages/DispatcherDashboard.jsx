@@ -753,11 +753,20 @@ export default function DispatcherDashboard() {
                 value={
                   selectedAmbulance
                 }
-                onChange={(e) =>
-                  setSelectedAmbulance(
-                    e.target.value
-                  )
-                }
+                onChange={(e) => {
+                  const ambId = e.target.value;
+                  setSelectedAmbulance(ambId);
+                  const matchedAmb = availableAmbulances.find(
+                    (a) => String(a._id) === String(ambId)
+                  );
+                  const drvId =
+                    matchedAmb?.driver?._id ||
+                    matchedAmb?.driverId ||
+                    (typeof matchedAmb?.driver === "string" ? matchedAmb.driver : null);
+                  if (drvId) {
+                    setSelectedDriver(String(drvId));
+                  }
+                }}
                 disabled={assigning}
                 className="mt-2 w-full rounded-lg border border-line bg-white px-4 py-3 text-sm text-navy outline-none focus:border-navy"
               >
@@ -775,10 +784,8 @@ export default function DispatcherDashboard() {
                         ambulance._id
                       }
                     >
-                      {
-                        ambulance.vehicleNumber
-                      }{" "}
-                      — {ambulance.tier}
+                      {ambulance.vehicleNumber} — {ambulance.tier}
+                      {ambulance.driver?.name ? ` (${ambulance.driver.name})` : ""}
                     </option>
                   )
                 )}

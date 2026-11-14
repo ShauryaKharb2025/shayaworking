@@ -16,7 +16,7 @@ function profile(req) {
   }));
   if (req.user.role === "admin" && typeof complianceVerified === "boolean") result.complianceVerified = complianceVerified;
   else if (tier !== undefined || equipment !== undefined || crew !== undefined) result.complianceVerified = false;
-  if (req.user.role === "admin" && (driverId === null || typeof driverId === "string")) result.driverId = driverId;
+  if (["admin", "operator", "dispatcher"].includes(req.user.role) && (driverId === null || typeof driverId === "string")) result.driverId = driverId;
   return result;
 }
 

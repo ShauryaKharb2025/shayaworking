@@ -15,7 +15,9 @@ async function fleet(req, res) {
   try {
     const ambulances = await Ambulance.find({
       status: { $ne: "offline" },
-    }).populate("operator", "name type");
+    })
+      .populate("operator", "name type")
+      .populate("driver", "name email phone");
 
     return res.json({ ambulances });
   } catch (err) {
@@ -103,13 +105,6 @@ async function driverActiveTrip(req, res) {
   try {
     const ambulance = await Ambulance.findOne({
       driver: req.user.sub,
-      status: {
-        $in: [
-          "dispatched",
-          "en_route",
-          "stale",
-        ],
-      },
     }).populate(
       "operator",
       "name type verified"
@@ -149,15 +144,8 @@ async function driverActiveTrip(req, res) {
         },
       });
 
-    if (!trip) {
-      return res.json({
-        trip: null,
-        ambulance: null,
-      });
-    }
-
     return res.json({
-      trip,
+      trip: trip || null,
       ambulance,
     });
   } catch (err) {
@@ -242,11 +230,19 @@ async function assignAmbulance(req, res) {
      * ==========================
      */
 
-    if (trip.ambulance) {
+    if (trip.ambulance && trip.status !== "offered") {
       return res.status(409).json({
         message:
           "An ambulance is already assigned to this trip",
       });
+    }
+
+    if (trip.status === "offered" && trip.ambulance && String(trip.ambulance) !== String(ambulanceId)) {
+      const prevAmb = await Ambulance.findById(trip.ambulance);
+      if (prevAmb && prevAmb.status === "dispatched") {
+        prevAmb.status = "idle";
+        await prevAmb.save();
+      }
     }
 
     /*
@@ -273,7 +269,7 @@ async function assignAmbulance(req, res) {
      */
 
     const [candidate] = ambulanceCandidates(trip, [ambulance]);
-    if (!candidate.eligible || trip.status !== "requested") {
+    if (!candidate.eligible || !["requested", "offered"].includes(trip.status)) {
       return res.status(409).json({ message: candidate.reasons.join("; ") || "Case is not awaiting dispatch" });
     }
 
@@ -318,6 +314,7 @@ async function assignAmbulance(req, res) {
     ) {
       const existingTrip =
         await Trip.findOne({
+          _id: { $ne: trip._id },
           ambulance: {
             $in: driverAmbulanceIds,
           },
@@ -489,6 +486,9 @@ async function assignAmbulance(req, res) {
         trip,
       }
     );
+    io?.to("driver").emit("trip:assigned", { tripId: trip._id, ambulance, trip });
+    io?.to(`driver:${driver._id}`).emit("case:refresh", { tripId: trip._id });
+    io?.to("driver").emit("case:refresh", { tripId: trip._id });
 
     /*
      * ==========================

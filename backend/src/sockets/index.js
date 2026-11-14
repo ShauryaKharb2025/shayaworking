@@ -377,6 +377,7 @@ socket.on(
       socket.join(
         `driver:${socket.user.sub}`
       );
+      socket.join("driver");
 
       console.log(
         `[socket] driver joined driver:${socket.user.sub}`

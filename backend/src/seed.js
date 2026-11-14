@@ -290,6 +290,12 @@ async function seed() {
     { upsert: true }
   );
 
+  await User.findOneAndUpdate(
+    { email: "driver1@sewa-ambulance.org" },
+    { name: "Ramesh Kumar", email: "driver1@sewa-ambulance.org", role: "driver", operator: operator._id, isActive: true },
+    { upsert: true }
+  );
+
   const passwordHash = await require("bcryptjs").hash("SahayDemo123!", 12);
   for (const role of ["clinician", "caregiver", "admin"]) {
     await User.findOneAndUpdate(

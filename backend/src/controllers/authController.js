@@ -4,13 +4,13 @@ const { signAccessToken, signRefreshToken, verifyRefreshToken } = require("../ut
 
 /**
  * POST /api/auth/google
- * Body: { idToken, role? }
+ * Body: { idToken }
  * Frontend gets `idToken` from Google Identity Services (One Tap / Sign in with Google button),
  * then this endpoint verifies it server-side and issues our own JWT (access + refresh).
  */
 async function googleLogin(req, res) {
   try {
-    const { idToken, role } = req.body;
+    const { idToken } = req.body;
     if (!idToken) return res.status(400).json({ message: "idToken is required" });
 
     const payload = await verifyGoogleIdToken(idToken);
@@ -26,16 +26,17 @@ async function googleLogin(req, res) {
         email: payload.email,
         avatar: payload.picture,
         googleId: payload.sub,
-        // Role is self-declared at signup time for the pilot (patient/driver/hospital/dispatcher).
-        // In production, driver/hospital/dispatcher roles should be assigned by an admin after verification.
-        role: ["patient", "caregiver", "driver", "hospital", "dispatcher", "operator"].includes(role) ? role : "patient",
+        role: "patient",
       });
+    } else if (user.googleId && user.googleId !== payload.sub) {
+      return res.status(401).json({ message: "Google account does not match" });
     } else if (!user.googleId) {
       user.googleId = payload.sub;
       user.avatar = user.avatar || payload.picture;
       await user.save();
     }
 
+    if (!user.isActive) return res.status(401).json({ message: "Account is inactive" });
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
 
@@ -74,6 +75,7 @@ async function refresh(req, res) {
     const user = await User.findById(decoded.sub);
     if (!user) return res.status(401).json({ message: "User not found" });
 
+    if (!user.isActive) return res.status(401).json({ message: "Account is inactive" });
     const accessToken = signAccessToken(user);
     return res.json({ accessToken });
   } catch (err) {

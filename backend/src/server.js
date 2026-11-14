@@ -1,4 +1,5 @@
-require("dotenv").config();
+const path = require("node:path");
+require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -48,6 +49,9 @@ app.use("/api/dispatch", dispatchRoutes);
 app.use("/api/ambulances", ambulanceRoutes);
 app.use("/api/hospitals", hospitalRoutes);
 app.use("/api/coverage", coverageRoutes);
+app.use("/api/cases", require("./routes/cases"));
+app.use("/api/intelligence", require("./routes/intelligence"));
+
 
 // 404 + error handler
 app.use((req, res) => res.status(404).json({ message: "Not found" }));

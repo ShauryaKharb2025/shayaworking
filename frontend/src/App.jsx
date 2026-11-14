@@ -13,6 +13,7 @@ const DriverDashboard = lazy(() => import("./pages/DriverDashboard"));
 const PatientDashboard = lazy(() => import("./pages/PatientDashboard"));
 const OperatorDashboard = lazy(() => import("./pages/OperatorDashboard"));
 import PatientSOS from "./pages/PatientSOS";
+import { CaregiverDashboard, ClinicianDashboard } from "./components/CaseWorkflow";
 import RolePreview from "./pages/RolePreview";
 import "./styles/dashboard.css";
 function RolePage({role,roles,children}) {
@@ -35,8 +36,8 @@ export default function App() {
   <Route path="/hospital" element={<RolePage role="hospital" roles={["hospital","admin"]}><HospitalConsole/></RolePage>}/>
   <Route path="/driver" element={<RolePage role="driver" roles={["driver"]}><DriverDashboard/></RolePage>}/>
   <Route path="/operator" element={<RolePage role="operator" roles={["operator","admin"]}><OperatorDashboard/></RolePage>}/>
-  <Route path="/clinician" element={<RolePreview role="clinician"/>}/>
-  <Route path="/caregiver" element={<RolePreview role="caregiver"/>}/>
+  <Route path="/clinician" element={<RolePage role="clinician" roles={["clinician"]}><ClinicianDashboard/></RolePage>}/>
+  <Route path="/caregiver" element={<RolePage role="caregiver" roles={["patient","caregiver"]}><CaregiverDashboard/></RolePage>}/>
   <Route path="*" element={<div className="sahay-role-placeholder sahay-card"><h1>Page not found</h1><a href="/" className="sahay-button dark">Return to Patient / SOS</a></div>}/>
  </Routes></Suspense></AppShell>;
 }

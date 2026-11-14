@@ -1,3 +1,5 @@
+const prisma = require("../data/prisma");
+const { ambulanceCandidates, distanceKm } = require("../services/matching");
 const Trip = require("../models/Trip");
 const Ambulance = require("../models/Ambulance");
 const User = require("../models/User");
@@ -123,9 +125,12 @@ async function driverActiveTrip(req, res) {
       ambulance: ambulance._id,
       status: {
         $in: [
+          "offered",
           "dispatched",
           "en_route",
           "arrived_pickup",
+          "picked_up",
+          "arrived_hospital",
           "en_route_hospital",
         ],
       },
@@ -252,7 +257,7 @@ async function assignAmbulance(req, res) {
     const ambulance =
       await Ambulance.findById(
         ambulanceId
-      );
+      ).populate("operator", "verified");
 
     if (!ambulance) {
       return res.status(404).json({
@@ -266,11 +271,9 @@ async function assignAmbulance(req, res) {
      * ==========================
      */
 
-    if (ambulance.status !== "idle") {
-      return res.status(409).json({
-        message:
-          "Ambulance is not available",
-      });
+    const [candidate] = ambulanceCandidates(trip, [ambulance]);
+    if (!candidate.eligible || trip.status !== "requested") {
+      return res.status(409).json({ message: candidate.reasons.join("; ") || "Case is not awaiting dispatch" });
     }
 
     /*
@@ -354,8 +357,7 @@ async function assignAmbulance(req, res) {
      */
 
     trip.ambulance = ambulance._id;
-    trip.status = "dispatched";
-    trip.dispatchedAt = new Date();
+    trip.status = "offered";
 
     /*
      * Manual dispatcher assignment
@@ -371,7 +373,8 @@ async function assignAmbulance(req, res) {
      */
 
     trip.events.push({
-      type: "ambulance:assigned",
+      type: "ambulance:offered",
+      actorId: req.user.sub,
       payload: {
         ambulanceId: ambulance._id,
         driverId: driver._id,
@@ -466,15 +469,7 @@ async function assignAmbulance(req, res) {
      * ==========================
      */
 
-    io?.to(`trip:${trip._id}`).emit(
-      "trip:status",
-      {
-        tripId: trip._id,
-        status: "dispatched",
-        trip,
-        ambulance,
-      }
-    );
+    io?.to(`trip:${trip._id}`).emit("case:refresh", { tripId: trip._id });
 
     /*
      * ==========================
@@ -502,7 +497,7 @@ async function assignAmbulance(req, res) {
 
     return res.json({
       message:
-        "Ambulance and driver assigned successfully",
+        "Dispatch offer sent to driver",
       trip,
       ambulance,
     });
@@ -578,6 +573,7 @@ async function tripContacts(req, res) {
 
     if (
       req.user.role === "driver" &&
+      !["cancelled", "handed_off"].includes(trip.status) &&
       trip.ambulance?.driver &&
       String(
         trip.ambulance.driver._id
@@ -603,7 +599,7 @@ async function tripContacts(req, res) {
           }
         : null,
 
-      driver: trip.ambulance?.driver
+      driver: (trip.status !== "offered" || req.user.role === "driver") && trip.ambulance?.driver
         ? {
             name:
               trip.ambulance.driver.name,
@@ -642,7 +638,6 @@ async function updateAmbulanceLocation(
       lng,
       lat,
       heading,
-      status,
     } = req.body;
 
     console.log(
@@ -650,7 +645,7 @@ async function updateAmbulanceLocation(
       req.params.id,
       lng,
       lat,
-      status
+      req.body.status
     );
 
     /*
@@ -663,7 +658,7 @@ async function updateAmbulanceLocation(
     const numericLat = Number(lat);
 
     if (
-      !Number.isFinite(numericLng) ||
+      !Number.isFinite(numericLng) || Math.abs(numericLng) > 180 || Math.abs(numericLat) > 90 ||
       !Number.isFinite(numericLat)
     ) {
       return res.status(400).json({
@@ -727,9 +722,7 @@ async function updateAmbulanceLocation(
 
     ambulance.lastPingAt = new Date();
 
-    if (status) {
-      ambulance.status = status;
-    }
+
 
     await ambulance.save();
 
@@ -795,7 +788,16 @@ async function updateAmbulanceLocation(
      * ==========================
      */
 
-    if (trip) {
+    if (trip && trip.status !== "offered") {
+      const target = trip.status === "en_route_hospital" && trip.hospital
+        ? (await prisma.hospital.findUnique({ where: { id: trip.hospital } }))?.location.coordinates
+        : trip.pickupLocation.coordinates;
+      if (target && ["dispatched", "en_route", "en_route_hospital"].includes(trip.status)) {
+        await prisma.trip.updateMany({
+          where: { id: trip._id, status: trip.status },
+          data: { etaMinutes: Math.ceil(distanceKm([numericLng, numericLat], target) * 2), version: { increment: 1 } },
+        });
+      }
       io?.to(`trip:${trip._id}`).emit(
         "trip:location",
         {
@@ -912,16 +914,65 @@ async function updateTripStatus(
       }
     }
 
+    const driverTransitions = {
+      offered: ["dispatched", "rejected"],
+      dispatched: ["en_route"],
+      en_route: ["arrived_pickup"],
+      arrived_pickup: ["picked_up"],
+      picked_up: ["en_route_hospital"],
+      en_route_hospital: ["arrived_hospital"],
+    };
+    const role = req.user.role;
+    const terminal = ["cancelled", "handed_off"].includes(trip.status);
+    const receivingAccount = role === "hospital" ? await User.findById(req.user.sub) : null;
+    const allowed = (role === "driver" && driverTransitions[trip.status]?.includes(status)) ||
+      (["patient", "dispatcher", "admin"].includes(role) && !terminal && status === "cancelled") ||
+      (role === "hospital" && receivingAccount?.hospital && receivingAccount.hospital === trip.hospital &&
+        trip.status === "arrived_hospital" && status === "handed_off");
+    if (!allowed || hospital !== undefined) return res.status(403).json({ message: "Transition is not authorized" });
+    if (status === "en_route_hospital" && !trip.hospital) {
+      return res.status(409).json({ message: "A confirmed destination is required" });
+    }
+    if (status === "rejected") {
+      const vehicleId = trip.ambulance;
+      trip.ambulance = null;
+      trip.status = "requested";
+      trip.autoDispatchAt = new Date(Date.now() + 300_000);
+      trip.events.push({ type: "ambulance:rejected", actorId: req.user.sub, at: new Date(), payload: { vehicleId } });
+      await require("../data/repository").transaction(async () => {
+        await trip.save();
+        await Ambulance.findByIdAndUpdate(vehicleId, { status: "idle" });
+      });
+      const io = req.app.get("io");
+      io?.in(`driver:${req.user.sub}`).socketsLeave(`trip:${trip._id}`);
+      io?.to("dispatcher").to(`trip:${trip._id}`).emit("case:refresh", { tripId: trip._id });
+      return res.json({ trip });
+    }
+    if (status === "dispatched") {
+      trip.dispatchedAt = new Date();
+      const vehicle = await Ambulance.findById(trip.ambulance);
+      trip.etaMinutes = Math.ceil(distanceKm(vehicle.location.coordinates, trip.pickupLocation.coordinates) * 2);
+    }
+    if (["arrived_pickup", "picked_up", "arrived_hospital", "handed_off"].includes(status)) trip.etaMinutes = null;
+    if (status === "en_route_hospital") {
+      const [vehicle, destination] = await Promise.all([
+        prisma.ambulance.findUnique({ where: { id: trip.ambulance } }),
+        prisma.hospital.findUnique({ where: { id: trip.hospital } }),
+      ]);
+      trip.etaMinutes = Math.ceil(distanceKm(vehicle.location.coordinates, destination.location.coordinates) * 2);
+    }
+
     /*
      * ==========================
      * CANCEL
      * ==========================
      */
 
-    if (
-      status === "cancelled"
-    ) {
+    if (status === "cancelled") {
+      const driverId = trip.ambulance && (await Ambulance.findById(trip.ambulance))?.driver;
+      const wasOffered = trip.status === "offered";
       trip.status = "cancelled";
+      trip.etaMinutes = null;
 
       /*
        * Release ambulance and driver.
@@ -933,12 +984,24 @@ async function updateTripStatus(
 
       trip.events.push({
         type: "status:cancelled",
+        actorId: req.user.sub,
         at: new Date(),
       });
 
       await require("../data/repository").transaction(async () => {
-        if (releaseAmbulance) await Ambulance.findByIdAndUpdate(trip.ambulance, {status:"idle",driver:null});
+        if (releaseAmbulance) await Ambulance.findByIdAndUpdate(trip.ambulance, {status:"idle"});
+        if (wasOffered) trip.ambulance = null;
         await trip.save();
+        const db = require("../data/repository").client();
+        const reservations = await db.hospitalReferral.findMany({
+          where: { tripId: trip._id, status: { in: ["accepted", "confirmed"] } },
+        });
+        for (const reservation of reservations) {
+          await db.hospital.update({ where: { id: reservation.hospitalId }, data: { bedsAvailable: { increment: 1 }, version: { increment: 1 } } });
+        }
+        await db.hospitalReferral.updateMany({
+          where: { tripId: trip._id, status: { in: ["proposed", "accepted", "confirmed"] } }, data: { status: "cancelled" },
+        });
       });
 
       /*
@@ -964,6 +1027,10 @@ async function updateTripStatus(
       ]);
 
       const io = req.app.get("io");
+      if (driverId) {
+        io?.in(`driver:${driverId}`).socketsLeave(`trip:${trip._id}`);
+        io?.to(`driver:${driverId}`).emit("case:refresh", { tripId: trip._id });
+      }
 
       /*
        * Patient
@@ -1002,15 +1069,13 @@ async function updateTripStatus(
      * ==========================
      */
 
+    const completingDriverId = status === "handed_off" && trip.ambulance && (await Ambulance.findById(trip.ambulance))?.driver;
     trip.status = status;
 
     /*
      * Update hospital if provided.
      */
 
-    if (hospital) {
-      trip.hospital = hospital;
-    }
 
     /*
      * ==========================
@@ -1054,11 +1119,12 @@ async function updateTripStatus(
 
     trip.events.push({
       type: `status:${status}`,
+      actorId: req.user.sub,
       at: new Date(),
     });
 
     await require("../data/repository").transaction(async () => {
-        if (releaseAmbulance) await Ambulance.findByIdAndUpdate(trip.ambulance, {status:"idle",driver:null});
+        if (releaseAmbulance) await Ambulance.findByIdAndUpdate(trip.ambulance, {status:"idle"});
         await trip.save();
       });
 
@@ -1098,6 +1164,10 @@ async function updateTripStatus(
     ]);
 
     const io = req.app.get("io");
+    if (completingDriverId) {
+      io?.in(`driver:${completingDriverId}`).socketsLeave(`trip:${trip._id}`);
+      io?.to(`driver:${completingDriverId}`).emit("case:refresh", { tripId: trip._id });
+    }
 
     /*
      * ==========================

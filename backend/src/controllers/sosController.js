@@ -159,7 +159,7 @@ const trip = await Trip.create({
     // ---------------------------------------------------------
 
     if (
-      symptoms.length &&
+      process.env.AI_SERVICE_URL && symptoms.length &&
       (coverage === "live" || coverage === "limited")
     ) {
       try {
@@ -273,28 +273,42 @@ const trip = await Trip.create({
  *
  * KEEPING EXISTING BEHAVIOUR UNCHANGED.
  */
-async function getTrip(req, res) {
-  const trip = await Trip.findById(req.params.id)
-    .populate("ambulance")
-    .populate("hospital");
+async function getTrip(req, res, next) {
+  try {
+    const trip = await Trip.findById(req.params.id)
+      .populate("ambulance")
+      .populate("hospital");
 
-  if (!trip) {
-    return res.status(404).json({
-      message: "Trip not found",
+    if (!trip) {
+      return res.status(404).json({
+        message: "Trip not found",
+      });
+    }
+
+    const userId = String(req.user.sub);
+    let allowed = ["dispatcher", "admin"].includes(req.user.role) || String(trip.patient) === userId;
+    if (!allowed && req.user.role === "driver" && !["cancelled", "handed_off"].includes(trip.status)) {
+      allowed = String(trip.ambulance?.driver) === userId;
+    }
+    if (!allowed && ["hospital", "operator"].includes(req.user.role)) {
+      const account = await require("../models/User").findById(userId);
+      allowed = req.user.role === "hospital"
+        ? !!account?.hospital && String(trip.hospital?._id) === String(account.hospital)
+        : !!account?.operator && String(trip.ambulance?.operator) === String(account.operator);
+    }
+    if (!allowed) return res.status(403).json({message:"You do not have access to this case."});
+    const referral = await require("../data/prisma").hospitalReferral.findFirst({
+      where: { tripId: trip._id, status: { in: ["proposed", "accepted"] } },
+      select: { status: true, hospital: { select: { name: true } } },
     });
+    const result = { ...trip.toJSON(), proposedHospital: referral?.hospital || null };
+    if (trip.status === "offered" && req.user.role === "patient") {
+      return res.json({ trip: { ...result, ambulance: null, events: trip.events.filter(event => !["ambulance:offered", "ambulance:auto_offered"].includes(event.type)) } });
+    }
+    return res.json({ trip: result });
+  } catch (error) {
+    next(error);
   }
-
-  const userId = String(req.user.sub);
-  let allowed = ["dispatcher", "admin"].includes(req.user.role) || String(trip.patient) === userId;
-  if (!allowed && req.user.role === "driver") allowed = String(trip.ambulance?.driver) === userId;
-  if (!allowed && ["hospital", "operator"].includes(req.user.role)) {
-    const account = await require("../models/User").findById(userId);
-    allowed = req.user.role === "hospital"
-      ? !!account?.hospital && String(trip.hospital?._id) === String(account.hospital)
-      : !!account?.operator && String(trip.ambulance?.operator) === String(account.operator);
-  }
-  if (!allowed) return res.status(403).json({message:"You do not have access to this case."});
-  return res.json({ trip });
 }
 
 /**
@@ -311,7 +325,9 @@ async function myTrips(req, res) {
     .sort({ createdAt: -1 })
     .limit(20);
 
-  return res.json({ trips });
+  return res.json({ trips: trips.map(trip => trip.status === "offered" ? {
+    ...trip.toJSON(), ambulance: null, events: trip.events.filter(event => !["ambulance:offered", "ambulance:auto_offered"].includes(event.type)),
+  } : trip) });
 }
 
 module.exports = {

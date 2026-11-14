@@ -63,6 +63,12 @@ export function roleHome(role) {
     case "driver":
       return "/driver";
 
+    case "clinician":
+      return "/clinician";
+
+    case "caregiver":
+      return "/caregiver";
+
     default:
       return "/sos";
   }

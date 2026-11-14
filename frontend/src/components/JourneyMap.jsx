@@ -19,8 +19,8 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
   tile.on("tileload",()=>setOffline(false));tile.addTo(instance);
   L.control.zoom({position:"topright"}).addTo(instance);
   layers.current=L.layerGroup().addTo(instance);
-  const observer=new ResizeObserver(()=>instance.invalidateSize());observer.observe(container.current);
-  return ()=>{observer.disconnect();instance.remove();map.current=null};
+  const observer=new ResizeObserver(()=>instance.invalidateSize({ animate: false, pan: false }));observer.observe(container.current);
+  return ()=>{observer.disconnect();instance.stop();instance.remove();map.current=null};
  },[]);
  useEffect(()=>{
   if(!map.current)return;
@@ -39,7 +39,7 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
    L.marker(hospital,{icon:marker("hospital","H")}).addTo(layers.current).bindTooltip(tooltip(preview?"H4 – AIIMS · sample":trip.hospital.name),{permanent:true,direction:"bottom"});bounds.push(hospital);
   }
   if(preview)L.polyline([pickupPoint,[28.64,77.163],vehicle,[28.62,77.19],[28.59,77.19],hospital],{color:"#3474ed",weight:4,dashArray:"8 7"}).addTo(layers.current);
-  map.current.fitBounds(L.latLngBounds(bounds).pad(.25),{maxZoom:13});
+  map.current.fitBounds(L.latLngBounds(bounds).pad(.25),{maxZoom:13, animate:false});
  },[trip,pickup,preview,onPickup]);
  return <section className="sahay-map" aria-label="Pickup, ambulance and hospital map">
   <div ref={container} className="sahay-map-canvas"/>

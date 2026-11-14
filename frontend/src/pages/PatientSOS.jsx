@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../api/axios";
+import { connectSocket } from "../api/socket";
 import { useAuth } from "../context/AuthContext";
+import { CaregiverInvitations } from "../components/CaseWorkflow";
 import JourneyMap from "../components/JourneyMap";
 import { Ambulance, ArrowRight, Building2, Check, CheckCircle2, ChevronRight, ClipboardList, Clock3, HeartPulse, LocateFixed, MapPin, Pill, ShieldCheck, Users } from "../components/Icons";
-const statusLabels={requested:"Awaiting dispatcher",waitlisted:"Outside current coverage",matched:"Ambulance matched",dispatched:"Ambulance dispatched",en_route:"Ambulance en route",arrived_pickup:"Arrived at pickup",en_route_hospital:"Travelling to hospital",handed_off:"Handoff complete",cancelled:"Request cancelled"};
+const statusLabels={requested:"Awaiting dispatcher",offered:"Awaiting driver acceptance",picked_up:"Patient picked up",arrived_hospital:"Arrived at hospital",waitlisted:"Outside current coverage",matched:"Ambulance matched",dispatched:"Ambulance dispatched",en_route:"Ambulance en route",arrived_pickup:"Arrived at pickup",en_route_hospital:"Travelling to hospital",handed_off:"Handoff complete",cancelled:"Request cancelled"};
 export default function PatientSOS() {
  const {user}=useAuth(), navigate=useNavigate(),{id}=useParams();
  const preview=!user;
- const canRequest=!user || ["patient","caregiver"].includes(user.role);
+ const canRequest=!user || user.role==="patient";
  const [trip,setTrip]=useState(null),[loading,setLoading]=useState(!!user),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const [address,setAddress]=useState(preview?"Patel Nagar, Delhi":""),[symptoms,setSymptoms]=useState(preview?"Severe chest pain, breathlessness, possible cardiac.":""),[needs,setNeeds]=useState("ALS"),[pickup,setPickup]=useState(null),[medical,setMedical]=useState(false);
  const updatePickup=useCallback(p=>setPickup(p),[]);
@@ -27,6 +29,21 @@ export default function PatientSOS() {
   finally{setLoading(false)}
  },[user,id]);
  useEffect(()=>{load();if(!user)return;const interval=setInterval(load,10000);return()=>clearInterval(interval)},[load,user]);
+ useEffect(() => {
+  const tripId = trip?._id;
+  if (!tripId || !user || !canRequest) return;
+  const socket = connectSocket();
+  const join = () => socket.emit("join:trip", tripId);
+  const refresh = event => { if (event?.tripId === tripId) load(); };
+  join();
+  socket.on("connect", join);
+  for (const name of ["case:refresh", "trip:status", "trip:location"]) socket.on(name, refresh);
+  return () => {
+   socket.off("connect", join);
+   socket.emit("leave:trip", tripId);
+   for (const name of ["case:refresh", "trip:status", "trip:location"]) socket.off(name, refresh);
+  };
+ }, [trip?._id, user, canRequest, load]);
  function locate(){
   if(!navigator.geolocation){setError("Location sharing is unavailable. Drag the map pin to select pickup.");return}
   setBusy(true);
@@ -44,12 +61,12 @@ export default function PatientSOS() {
   finally{setBusy(false)}
  }
  const ambulance=trip?.ambulance,hospital=trip?.hospital;
- const stage=preview?2:({requested:0,matched:1,dispatched:1,en_route:2,arrived_pickup:2,en_route_hospital:3,handed_off:4}[trip?.status]??-1);
+ const stage=preview?2:({requested:0,offered:0,picked_up:2,arrived_hospital:3,matched:1,dispatched:1,en_route:2,arrived_pickup:2,en_route_hospital:3,handed_off:4}[trip?.status]??-1);
  const timeline=[
   ["SOS Received",preview?"Cardiac emergency (ALS)":trip?trip.address||"Emergency request received":"Your request will appear here",trip?.createdAt],
   ["Ambulance Assigned",preview?"ALS-03 · Crew: Paramedic + EMT":ambulance?.vehicleNumber||"Awaiting dispatcher assignment",trip?.dispatchedAt],
   ["Ambulance En Route",preview?"ETA: 6 min · 2.4 km":trip?.etaMinutes?("Estimated pickup: "+trip.etaMinutes+" min"):"ETA not yet available",null],
-  [preview?"Hospital Confirmed (H4)":"Hospital destination",preview?"AIIMS · Cardiac Care · Sample readiness":hospital?.name?hospital.name+" · acceptance not recorded":"Awaiting hospital selection",null],
+  [preview?"Hospital Confirmed (H4)":"Hospital destination",preview?"AIIMS · Cardiac Care · Sample readiness":hospital?.name?hospital.name+" · confirmed":trip?.proposedHospital?.name?trip.proposedHospital.name+" · proposed":"Awaiting hospital selection",null],
   ["Patient Handoff",preview?"At hospital (after arrival)":trip?.handedOffAt?"Handoff recorded":"Pending hospital arrival and handoff",trip?.handedOffAt]
  ];
  const time=value=>value?new Date(value).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):"Pending";
@@ -80,8 +97,9 @@ export default function PatientSOS() {
     </div>
    </div>
    <aside className="sahay-case-column">
-    <section className="sahay-card sahay-case-summary"><div><div><span className="sahay-muted">Case ID</span><h2>{preview?"SH-CARD-001":trip?trip._id.slice(0,13).toUpperCase():loading?"Loading…":"No active case"}</h2></div><span className="sahay-case-badge"><HeartPulse size={20}/>{preview?"ALS (Cardiac)":ambulance?.tier||"SOS"}</span></div><div className={"sahay-status "+(trip?.status==="cancelled"?"cancelled":"")}><span>i</span><b>Status:</b> {preview?"Ambulance En Route":loading?"Loading case…":statusLabels[trip?.status]||"Ready when you need help"}</div></section>
+    <section className="sahay-card sahay-case-summary"><div><div><span className="sahay-muted">Case ID</span><h2>{preview?"SH-CARD-001":trip?trip._id:loading?"Loading…":"No active case"}</h2></div><span className="sahay-case-badge"><HeartPulse size={20}/>{preview?"ALS (Cardiac)":ambulance?.tier||"SOS"}</span></div><div className={"sahay-status "+(trip?.status==="cancelled"?"cancelled":"")}><span>i</span><b>Status:</b> {preview?"Ambulance En Route":loading?"Loading case…":statusLabels[trip?.status]||"Ready when you need help"}</div></section>
     <section className="sahay-card sahay-timeline"><h2><ClipboardList/> Response Timeline</h2><ol>{timeline.map(([title,description,at],i)=><li key={title} className={i<stage?"complete":i===stage?"current":""}><span className="sahay-timeline-node">{i<stage?<Check size={14}/>:null}</span><div><div><strong>{title}</strong><time>{preview?(i===0?"10:24 AM":i===1?"10:26 AM":i===2?"10:27 AM":"Pending"):time(at)}</time></div><p>{description}</p></div></li>)}</ol>{!preview&&<p className="sahay-timeline-foot">Updates refresh every 10 seconds. Pending milestones are not confirmations.</p>}</section>
+    {trip && canRequest && <CaregiverInvitations key={trip._id} tripId={trip._id} />}
    </aside>
   </div>
   <div className="sahay-summary-grid">

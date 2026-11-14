@@ -4,7 +4,7 @@ Paths are relative to `/api`. Unless marked public, send an access token as `Aut
 
 | Consumer | Method and path | Request and response |
 |---|---|---|
-| Sign-in | POST `/auth/google` (public) | Google `idToken`; returns `accessToken` and `user`, sets refresh cookie. New accounts have patient permissions. |
+| Sign-in | POST `/auth/login` (public) | `email`, optional `role`, `name`; returns `accessToken` and `user`, sets refresh cookie. New accounts have patient permissions. |
 | Session | POST `/auth/refresh`, POST `/auth/logout`, GET `/auth/me` | Refresh uses the cookie; logout clears it; me returns the authenticated account. |
 | Patient | POST `/sos` | `lng`, `lat`, optional `address`, `symptoms` and `requestedAmbulanceTier`; 201 with `trip`, status and persistent `_id`. |
 | Case and history | GET `/sos`, GET `/sos/:id` | Own cases or authorised case detail. Detail returns `trip.proposedHospital`, `trip.hospital`, and accepted vehicle data. |

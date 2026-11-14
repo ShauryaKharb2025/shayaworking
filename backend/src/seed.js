@@ -258,6 +258,28 @@ async function seed() {
     seededHospitals.push(doc);
   }
 
+  console.log("[seed] Seeding demo role accounts...");
+  await User.findOneAndUpdate(
+    { email: "patient@sahay.org" },
+    { name: "Aarav Sharma", email: "patient@sahay.org", role: "patient", isActive: true },
+    { upsert: true }
+  );
+  await User.findOneAndUpdate(
+    { email: "dispatcher@sahay.org" },
+    { name: "Priya Nair", email: "dispatcher@sahay.org", role: "dispatcher", isActive: true },
+    { upsert: true }
+  );
+  await User.findOneAndUpdate(
+    { email: "hospital@sahay.org" },
+    { name: "Dr. Alok Verma", email: "hospital@sahay.org", role: "hospital", hospital: seededHospitals[0]?._id, isActive: true },
+    { upsert: true }
+  );
+  await User.findOneAndUpdate(
+    { email: "operator@sewa-ambulance.org" },
+    { name: "Sewa Trust Admin", email: "operator@sewa-ambulance.org", role: "operator", operator: operator._id, isActive: true },
+    { upsert: true }
+  );
+
   console.log("[seed] Seeding 10 ambulances with dedicated certified drivers...");
   const seededAmbulances = [];
   for (const a of AMBULANCES) {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback } from "react";
 import api from "../api/axios";
 import { disconnectSocket } from "../api/socket";
 
@@ -11,11 +11,10 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
 
-  // Called with the Google Identity Services credential (idToken).
-  const loginWithGoogle = useCallback(async (idToken, role) => {
+  const login = useCallback(async ({ email, role, name }) => {
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/google", { idToken, role });
+      const { data } = await api.post("/auth/login", { email, role, name });
       disconnectSocket();
       localStorage.setItem("sahay_access_token", data.accessToken);
       localStorage.setItem("sahay_user", JSON.stringify(data.user));
@@ -38,7 +37,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

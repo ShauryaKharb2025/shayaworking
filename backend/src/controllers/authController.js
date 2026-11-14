@@ -1,42 +1,39 @@
 const User = require("../models/User");
-const { verifyGoogleIdToken } = require("../config/googleClient");
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require("../utils/jwt");
 
 /**
- * POST /api/auth/google
- * Body: { idToken }
- * Frontend gets `idToken` from Google Identity Services (One Tap / Sign in with Google button),
- * then this endpoint verifies it server-side and issues our own JWT (access + refresh).
+ * POST /api/auth/login
+ * Body: { email, role, name }
+ * Directly signs in or creates account without external OAuth dependency,
+ * then issues access JWT and sets refresh cookie.
  */
-async function googleLogin(req, res) {
+async function login(req, res) {
   try {
-    const { idToken } = req.body;
-    if (!idToken) return res.status(400).json({ message: "idToken is required" });
-
-    const payload = await verifyGoogleIdToken(idToken);
-    if (!payload || !payload.email_verified) {
-      return res.status(401).json({ message: "Google account email not verified" });
+    const { email, role, name } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ message: "Email is required" });
     }
 
-    let user = await User.findOne({ email: payload.email });
+    const cleanEmail = email.trim().toLowerCase();
+    let user = await User.findOne({ email: cleanEmail });
 
     if (!user) {
       user = await User.create({
-        name: payload.name || payload.email.split("@")[0],
-        email: payload.email,
-        avatar: payload.picture,
-        googleId: payload.sub,
-        role: "patient",
+        name: name || cleanEmail.split("@")[0],
+        email: cleanEmail,
+        role: role || "patient",
+        isActive: true,
       });
-    } else if (user.googleId && user.googleId !== payload.sub) {
-      return res.status(401).json({ message: "Google account does not match" });
-    } else if (!user.googleId) {
-      user.googleId = payload.sub;
-      user.avatar = user.avatar || payload.picture;
+    } else if (role && user.role !== role) {
+      // Allow demo / role switching if user requests a specific role
+      user.role = role;
       await user.save();
     }
 
-    if (!user.isActive) return res.status(401).json({ message: "Account is inactive" });
+    if (!user.isActive) {
+      return res.status(401).json({ message: "Account is inactive" });
+    }
+
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
 
@@ -50,18 +47,18 @@ async function googleLogin(req, res) {
     return res.json({
       accessToken,
       user: {
-  id: user._id,
-  name: user.name,
-  email: user.email,
-  avatar: user.avatar,
-  role: user.role,
-  hospital: user.hospital,
-  operator: user.operator,
-},
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        role: user.role,
+        hospital: user.hospital,
+        operator: user.operator,
+      },
     });
   } catch (err) {
-    console.error("[auth] google login failed:", err.message);
-    return res.status(401).json({ message: "Google authentication failed" });
+    console.error("[auth] login failed:", err.message);
+    return res.status(500).json({ message: "Authentication failed" });
   }
 }
 
@@ -94,4 +91,4 @@ async function me(req, res) {
   return res.json({ user });
 }
 
-module.exports = { googleLogin, refresh, logout, me };
+module.exports = { login, refresh, logout, me };

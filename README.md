@@ -49,9 +49,8 @@ Then run:
     npm install
     npm run dev -- --host 127.0.0.1 --port 5174 --strictPort
 
-Google login still requires a valid Google OAuth client ID in both backend/.env
-and frontend/.env.local. Register the frontend origin with Google.
-The database migration does not bypass authentication.
+Authentication uses self-contained JWT and role-based sessions without external
+OAuth dependencies. Sign in directly from the login page or select a quick demo role.
 
 The optional Python triage service can be started from ai-service using its
 requirements.txt and app.py. SOS creation continues if that service is unavailable.

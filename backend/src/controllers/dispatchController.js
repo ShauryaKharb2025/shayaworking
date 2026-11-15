@@ -139,7 +139,7 @@ async function driverActiveTrip(req, res) {
       .populate("patient", "name phone")
       .populate(
         "hospital",
-        "name address phone"
+        "name address phone location"
       )
       .populate({
         path: "ambulance",
@@ -156,10 +156,12 @@ async function driverActiveTrip(req, res) {
       });
     }
 
-    return res.json({
-      trip,
-      ambulance,
+    const proposal = await require("../data/prisma").hospitalReferral.findFirst({
+      where: { tripId: trip._id, status: { in: ["proposed","accepted"] } },
+      select: { hospital: { select: { id: true, name: true, address: true, location: true, specialties: true } } },
     });
+    const { careDetails, ...driverTrip } = trip.toJSON();
+    return res.json({ trip: { ...driverTrip, proposedHospital: proposal?.hospital || null }, ambulance });
   } catch (err) {
     console.error(
       "[dispatch] driver active trip error:",
@@ -429,7 +431,7 @@ async function assignAmbulance(req, res) {
       },
       {
         path: "hospital",
-        select: "name address phone",
+        select: "name address phone location",
       },
       {
         path: "ambulance",
@@ -933,9 +935,16 @@ async function updateTripStatus(
     const role = req.user.role;
     const terminal = ["cancelled", "handed_off"].includes(trip.status);
     const receivingAccount = role === "hospital" ? await User.findById(req.user.sub) : null;
+    const demoReceiving = role === "hospital" && process.env.NODE_ENV !== "production" &&
+      receivingAccount?.email === "hospital@sahay.org" &&
+      (await User.findById(trip.patient))?.email === "patient@sahay.org" &&
+      !!(await prisma.hospitalReferral.findFirst({
+        where: { tripId: trip._id, hospitalId: trip.hospital, status: "confirmed" },
+      }));
     const allowed = (role === "driver" && driverTransitions[trip.status]?.includes(status)) ||
       (["patient", "dispatcher", "admin"].includes(role) && !terminal && status === "cancelled") ||
-      (role === "hospital" && receivingAccount?.hospital && receivingAccount.hospital === trip.hospital &&
+      (role === "hospital" && trip.hospital &&
+        (receivingAccount?.hospital === trip.hospital || demoReceiving) &&
         trip.status === "arrived_hospital" && status === "handed_off");
     if (!allowed || hospital !== undefined) return res.status(403).json({ message: "Transition is not authorized" });
     if (status === "en_route_hospital" && (!trip.hospital ||
@@ -1025,7 +1034,7 @@ async function updateTripStatus(
         },
         {
           path: "hospital",
-          select: "name address phone",
+          select: "name address phone location",
         },
         {
           path: "ambulance",
@@ -1162,7 +1171,7 @@ async function updateTripStatus(
       },
       {
         path: "hospital",
-        select: "name address phone",
+        select: "name address phone location",
       },
       {
         path: "ambulance",

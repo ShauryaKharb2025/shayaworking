@@ -7,6 +7,7 @@
  * - Live coverage zones
  */
 require("dotenv").config();
+if (process.env.NODE_ENV === "production") throw new Error("Demo seeding is disabled in production");
 const connectDB = require("./config/db");
 const Operator = require("./models/Operator");
 const Ambulance = require("./models/Ambulance");
@@ -265,11 +266,6 @@ async function seed() {
     { upsert: true }
   );
   await User.findOneAndUpdate(
-    { email: "dispatcher@sahay.org" },
-    { name: "Priya Nair", email: "dispatcher@sahay.org", role: "dispatcher", isActive: true },
-    { upsert: true }
-  );
-  await User.findOneAndUpdate(
     { email: "hospital@sahay.org" },
     { name: "Dr. Alok Verma", email: "hospital@sahay.org", role: "hospital", hospital: seededHospitals[0]?._id, isActive: true },
     { upsert: true }
@@ -314,7 +310,7 @@ async function seed() {
         driver: driver._id,
         tier: a.tier,
         equipment: a.equipment,
-        crew: a.crew,
+        crew: a.crew.map((member, index) => index === 0 ? { ...member, userId: driver._id } : member),
         status: "idle",
         location: { type: "Point", coordinates: a.coordinates },
         complianceVerified: true,
@@ -352,12 +348,15 @@ async function seed() {
     `[seed] Successfully seeded ${seededAmbulances.length} ambulances and ${seededHospitals.length} hospitals!`
   );
   for (const email of [
-    "patient@sahay.org", "dispatcher@sahay.org", "hospital@sahay.org",
+    "patient@sahay.org", "hospital@sahay.org",
     "operator@sewa-ambulance.org", "driver.ramesh@sahay.local",
     "clinician@sahay.org", "caregiver@sahay.org", "admin@sahay.org",
   ]) {
     await require("./data/prisma").user.update({ where: { email }, data: { passwordHash } });
   }
+  await require("./data/prisma").user.update({
+    where: { email: "clinician@sahay.org" }, data: { hospitalId: seededHospitals[0]._id },
+  });
   process.exit(0);
 }
 

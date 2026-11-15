@@ -134,3 +134,10 @@ router.patch(
 );
 
 module.exports = router;
+router.post("/trip/:id/demo-drive", requireAuth, requireRole("driver"), async (req,res,next)=>{
+ try {
+  await require("../services/demoDrive").beginDemoDrive(req.params.id,req.user.sub,req.body.destination);
+  req.app.get("io")?.to("dispatcher").to(`trip:${req.params.id}`).to(`driver:${req.user.sub}`).emit("case:refresh",{tripId:req.params.id});
+  res.json({ok:true});
+ } catch(error){next(error);}
+});

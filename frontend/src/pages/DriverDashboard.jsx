@@ -1,5 +1,8 @@
+import CaseCarePanel from "../components/CaseCarePanel";
 import { useEffect, useRef, useState } from "react";
 import api from "../api/axios";
+import { ClinicalObservations, SpecialistBooking } from "../components/CaseWorkflow";
+import JourneyMap from "../components/JourneyMap";
 import { connectSocket } from "../api/socket";
 
 export default function DriverDashboard() {
@@ -65,7 +68,11 @@ export default function DriverDashboard() {
   socket.on("trip:assigned", handleTripAssigned);
   socket.on("trip:matched", handleTripMatched);
 
+  const refreshTimer = setInterval(loadDriverData, 10000);
+  socket.on("connect", loadDriverData);
   return () => {
+    clearInterval(refreshTimer);
+    socket.off("connect", loadDriverData);
     socket.off("case:refresh", loadDriverData);
     socket.off("trip:assigned", handleTripAssigned);
     socket.off("trip:matched", handleTripMatched);
@@ -83,7 +90,15 @@ useEffect(() => {
   }
 
   const socket = connectSocket();
-  socket.emit("join:trip", trip._id);
+  const join = () => socket.emit("join:trip", trip._id);
+  const locationUpdate = event => {
+    if (event?.tripId !== trip._id) return;
+    setAmbulance(current => current ? {...current, location:{type:"Point",coordinates:[event.lng,event.lat]},lastPingAt:new Date().toISOString()} : current);
+  };
+  join();
+  socket.on("connect",join);
+  socket.on("trip:location",locationUpdate);
+  return () => { socket.off("connect",join);socket.off("trip:location",locationUpdate);socket.emit("leave:trip",trip._id); };
 }, [trip?._id]);
 
 
@@ -156,7 +171,7 @@ useEffect(() => {
   }
 
   async function updateTripStatus(
-    status
+    status, simulate = import.meta.env.DEV
   ) {
     if (!trip) {
       return;
@@ -166,6 +181,18 @@ useEffect(() => {
       setUpdatingStatus(true);
       setError("");
 
+      if (status === "dispatched" && simulate && import.meta.env.DEV) {
+        stopGPS();
+        await api.post(`/dispatch/trip/${trip._id}/demo-drive`);
+        await loadDriverData();
+        return;
+      }
+      if (status === "en_route_hospital" && import.meta.env.DEV) {
+        stopGPS();
+        await api.post(`/dispatch/trip/${trip._id}/demo-drive`, {destination:"hospital"});
+        await loadDriverData();
+        return;
+      }
       const { data } =
         await api.patch(
           `/dispatch/trip/${trip._id}/status`,
@@ -175,6 +202,7 @@ useEffect(() => {
         );
 
       setTrip(data.trip);
+      if (status === "dispatched" && watchId.current === null) startGPS();
 
       /*
        * After handoff, ambulance becomes idle.
@@ -208,6 +236,17 @@ useEffect(() => {
   }
 
   function startGPS() {
+    if (import.meta.env.DEV) {
+      if (trip && ["offered","dispatched","en_route"].includes(trip.status) && !trip.events?.some(event=>event.type==="journey:demo_drive_started")) {
+        updateTripStatus("dispatched", true);
+      }
+      return;
+    }
+    if (["en_route","en_route_hospital"].includes(trip?.status) && trip.events?.some(event=>event.type.startsWith("journey:demo_"))) {
+      setError("The simulated drive supplies shared positions until arrival at pickup.");
+      return;
+    }
+    if (watchId.current !== null) return;
     if (!ambulance) {
       setError(
         "No ambulance assigned."
@@ -227,6 +266,7 @@ useEffect(() => {
     watchId.current =
       navigator.geolocation.watchPosition(
         async (position) => {
+          if (position.coords.accuracy > 100) { setError("GPS accuracy is low. Move to an open area for precise tracking."); return; }
           const lat =
             position.coords.latitude;
 
@@ -251,10 +291,7 @@ useEffect(() => {
                   heading !== null
                     ? heading
                     : undefined,
-                status:
-                  trip
-                    ? "en_route"
-                    : ambulance.status,
+
               }
             );
 
@@ -262,18 +299,13 @@ useEffect(() => {
               prev
                 ? {
                     ...prev,
-                    status:
-                      trip
-                        ? "en_route"
-                        : prev.status,
+                    location: { type: "Point", coordinates: [lng, lat] },
+                    lastPingAt: new Date().toISOString(),
                   }
                 : prev
             );
           } catch (err) {
-            console.error(
-              "[driver] GPS update failed:",
-              err
-            );
+            setError(err.response?.data?.message || "GPS update could not be sent. Check your connection.");
           }
         },
         (err) => {
@@ -283,12 +315,15 @@ useEffect(() => {
           );
 
           setError(
-            "Unable to get your location. Please allow location access."
+            "Pickup accepted, but GPS permission or a precise position is unavailable. Allow location access and use Start GPS to retry."
           );
+          if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+          watchId.current = null;
+          setGpsActive(false);
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 5000,
+          maximumAge: 0,
           timeout: 10000,
         }
       );
@@ -311,7 +346,7 @@ useEffect(() => {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-12">
+    <div className="sahay-role-workspace sahay-driver-workspace">
       <p className="text-sm font-medium text-signal-dark">
         Driver console
       </p>
@@ -335,8 +370,9 @@ useEffect(() => {
           AMBULANCE
       ========================== */}
 
+      <div className="sahay-driver-layout">
       {ambulance && (
-        <div className="mt-8 rounded-xl border border-line bg-white p-6">
+        <div className="sahay-driver-vehicle rounded-xl border border-line bg-white p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-ink/40">
@@ -356,14 +392,11 @@ useEffect(() => {
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg bg-paper p-4">
               <p className="text-xs text-ink/40">
-                Ambulance status
+                {trip ? "Journey status" : "Ambulance status"}
               </p>
 
               <p className="mt-1 font-medium capitalize text-navy">
-                {ambulance.status?.replace(
-                  /_/g,
-                  " "
-                )}
+                {(trip?.status || ambulance.status)?.replaceAll("_"," ")}
               </p>
             </div>
 
@@ -373,9 +406,9 @@ useEffect(() => {
               </p>
 
               <p className="mt-1 font-medium text-navy">
-                {gpsActive
-                  ? "🟢 Active"
-                  : "⚪ Off"}
+                {import.meta.env.DEV
+                  ? ["en_route","en_route_hospital"].includes(trip?.status) && trip.events?.some(event=>event.type.startsWith("journey:demo_")) ? "Mock GPS active" : ["arrived_pickup","arrived_hospital"].includes(trip?.status) ? "Arrival recorded" : "Mock GPS ready"
+                  : gpsActive ? "🟢 Active" : "⚪ Off"}
               </p>
             </div>
           </div>
@@ -394,21 +427,16 @@ useEffect(() => {
           )}
 
           <div className="mt-6">
-            {!gpsActive ? (
-              <button
-                onClick={startGPS}
-                className="rounded-lg bg-navy px-5 py-3 text-sm font-medium text-white"
-              >
-                📍 Start GPS
-              </button>
-            ) : (
-              <button
-                onClick={stopGPS}
-                className="rounded-lg border border-line px-5 py-3 text-sm font-medium text-navy"
-              >
-                Stop GPS
-              </button>
-            )}
+            {import.meta.env.DEV ? (
+              <div className="rounded-lg bg-paper p-4" role="status">
+                {trip && ["offered","dispatched","en_route"].includes(trip.status) && !trip.events?.some(event=>event.type==="journey:demo_drive_started") ? <>
+                  <p className="font-semibold text-navy">A ride has been allotted to your ambulance.</p>
+                  <p>Continue to the marked pickup. Mock GPS starts nearby and is shared with the patient.</p>
+                  <button disabled={updatingStatus} onClick={()=>updateTripStatus("dispatched",true)} className="mt-3 rounded-lg bg-navy px-5 py-3 text-white">Continue to pickup · mock GPS</button>
+                </> : <p>{trip?.status === "en_route_hospital" ? "Travelling to the allotted hospital with shared mock GPS." : trip?.status === "arrived_hospital" ? "Arrived at the allotted hospital. Awaiting hospital handoff." : trip?.status === "picked_up" ? "Patient pickup confirmed. Start the route to the allotted hospital below." : trip?.status === "en_route" ? "Travelling to the marked pickup with shared mock GPS." : trip?.status === "arrived_pickup" ? "You have reached the marked pickup. Confirm patient pickup below." : "Mock GPS is ready. Your next allotted ride will appear here."}</p>}
+              </div>
+            ) : !gpsActive ? <button onClick={startGPS} className="rounded-lg bg-navy px-5 py-3 text-white">Start GPS</button>
+              : <button onClick={stopGPS} className="rounded-lg border border-line px-5 py-3">Stop GPS</button>}
           </div>
         </div>
       )}
@@ -420,9 +448,7 @@ useEffect(() => {
           </p>
 
           <p className="mt-1 text-sm text-ink/50">
-            A dispatcher must assign an
-            ambulance and driver before
-            you can receive an emergency trip.
+            Your fleet operator must link your account to an ambulance before automatic pickup offers can reach you.
           </p>
         </div>
       )}
@@ -432,7 +458,7 @@ useEffect(() => {
       ========================== */}
 
       {trip && (
-        <div className="mt-8 rounded-xl border border-line bg-white p-6">
+        <div className="sahay-driver-case rounded-xl border border-line bg-white p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-ink/40">
@@ -452,6 +478,8 @@ useEffect(() => {
             </span>
           </div>
 
+          {trip.status === "offered" && <p role="status">A ride has been allotted to your ambulance. Review the patient and pickup details, then continue to the marked pickup.</p>}
+          {trip.triage?.suggestedEquipment?.length > 0 && <p>Required equipment · {trip.triage.suggestedEquipment.join(", ")}</p>}
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg bg-paper p-4">
               <p className="text-xs text-ink/40">
@@ -478,8 +506,7 @@ useEffect(() => {
               </p>
 
               <p className="mt-1 font-medium text-navy">
-                {trip.hospital?.name ||
-                  "Not selected yet"}
+                {trip.hospital?.name || (trip.proposedHospital?.name ? trip.proposedHospital.name + " · receiving request pending" : "Matching emergency-capable hospital")}
               </p>
 
               {trip.hospital?.address && (
@@ -501,22 +528,20 @@ useEffect(() => {
             </p>
           </div>
 
-          {/* ==========================
-              STATUS CONTROLS
-          ========================== */}
-
-          <div className="mt-6">
+          <section className="sahay-trip-actions" aria-label="Trip actions">
             <p className="text-xs uppercase tracking-wide text-ink/40">
               Trip controls
             </p>
+            {trip.status==="arrived_hospital" && <p>Arrival is recorded. The hospital receiving team will complete the handoff.</p>}
 
             <div className="mt-3 flex flex-wrap gap-2">
               {trip.status === "offered" && <>
-                <button disabled={updatingStatus} onClick={() => updateTripStatus("dispatched")}>Accept dispatch offer</button>
-                <button disabled={updatingStatus} onClick={() => updateTripStatus("rejected")}>Reject dispatch offer</button>
+                {!import.meta.env.DEV && <button disabled={updatingStatus} onClick={() => updateTripStatus("dispatched")}>Accept pickup &amp; enable GPS</button>}
+
+                <button disabled={updatingStatus} onClick={() => updateTripStatus("rejected")}>Reject pickup offer</button>
               </>}
               {trip.status === "arrived_pickup" && <button disabled={updatingStatus} onClick={() => updateTripStatus("picked_up")}>Confirm patient pickup</button>}
-              {trip.status === "picked_up" && !trip.hospital && <p>Waiting for a confirmed destination.</p>}
+              {trip.status === "picked_up" && !trip.hospital && <p>Hospital selected · {trip.proposedHospital?.name || "matching in progress"}. Waiting for the hospital to accept the emergency receiving request.</p>}
               {trip.status ===
                 "dispatched" && (
                 <button
@@ -564,7 +589,7 @@ useEffect(() => {
                   }
                   className="rounded-full bg-navy px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
                 >
-                  🏥 Start hospital journey
+                  🏥 Start route to allotted hospital
                 </button>
               )}
 
@@ -585,7 +610,18 @@ useEffect(() => {
                 </button>
               )}
             </div>
-          </div>
+          </section>
+          <JourneyMap trip={{...trip, ambulance: ambulance || trip.ambulance}} />
+          {trip.status!=="offered" && <CaseCarePanel key={trip._id} caseId={trip._id}/>}
+          {["picked_up","en_route_hospital","arrived_hospital"].includes(trip.status) && <>
+            <details><summary>Record a clinical or treatment update</summary><ClinicalObservations caseId={trip._id}/></details>
+            <SpecialistBooking caseId={trip._id}/>
+          </>}
+          {/* ==========================
+              STATUS CONTROLS
+          ========================== */}
+
+
         </div>
       )}
 
@@ -597,7 +633,7 @@ useEffect(() => {
 
           <p className="mt-1 text-sm text-ink/50">
             Your ambulance is assigned. When
-            dispatch assigns an emergency,
+            the engine matches your ambulance to a pickup,
             the trip will appear here.
           </p>
 
@@ -609,6 +645,7 @@ useEffect(() => {
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }

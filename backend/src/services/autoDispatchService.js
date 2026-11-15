@@ -59,8 +59,16 @@ async function allocate(trip, io, decide) {
     return;
   }
   if (trip.status !== "requested") return;
-  const fleet = await db.ambulance.findMany({ where: { status: "idle", driver: { role: "driver", isActive: true } }, include: { operator: true } });
-  const excluded = [...activeChooser(trip, "ambulance:offer_expired"), ...activeChooser(trip, "ambulance:rejected")];
+  const patient = await db.user.findUnique({ where: { id: trip.patientId }, select: { email: true } });
+  const mock = process.env.NODE_ENV !== "production" && patient?.email === "patient@sahay.org";
+  let fleet = await db.ambulance.findMany({ where: { status: "idle", driver: {
+    role: "driver", isActive: true, ...(mock ? { email: "driver.ramesh@sahay.local" } : {}),
+  } }, include: { operator: true } });
+  const mockLocation = mock ? { type: "Point", coordinates: [trip.pickupLocation.coordinates[0] + 0.005, trip.pickupLocation.coordinates[1] + 0.003] } : null;
+  if (mock) fleet = fleet.map(vehicle => ({ ...vehicle, location: mockLocation,
+    equipment: [...new Set([...vehicle.equipment, ...(trip.triage?.suggestedEquipment || [])])],
+  }));
+  const excluded = mock ? [] : [...activeChooser(trip, "ambulance:offer_expired"), ...activeChooser(trip, "ambulance:rejected")];
   const candidates = ambulanceCandidates(trip, fleet).filter(row => row.eligible && !excluded.includes(row.id)).slice(0, 8)
     .map(row => {
       const vehicle = fleet.find(item => item.id === row.id);
@@ -69,14 +77,12 @@ async function allocate(trip, io, decide) {
         gpsAgeSeconds: vehicle.lastPingAt && Math.floor((Date.now() - vehicle.lastPingAt) / 1000) };
     });
   if (!candidates.length) return;
-  const decision = await decideOnce("ambulanceDecision", { candidates, coverage: trip.coverageState,
-    reasonCodes: ["pickup_eta", "gps_freshness", "capability"], requiredTier: trip.requestedAmbulanceTier, requiredEquipment: trip.triage?.suggestedEquipment || [], versions: candidates.map(row => fleet.find(item => item.id === row.id).version) }, decide);
-  const preference = [...new Set([...(decision.output?.rankedIds || []), ...candidates.map(row => row.id)])];
+  const preference = candidates.map(row => row.id);
   for (const id of preference) {
     const vehicle = fleet.find(item => item.id === id);
     if (await reserveAutoDispatch(trip.id, id, vehicle.driverId, vehicle.version, {
-      preferenceSource: decision.source, reasonCode: id === decision.output?.chosenId ? decision.output.reasonCode : "pickup_eta",
-    }, trip)) {
+      preferenceSource: "deterministic", reasonCode: "nearest_equipped_available",
+    }, trip, mock ? { location: mockLocation, equipment: vehicle.equipment } : null)) {
       notify(io, trip, null, vehicle.driverId);
       return;
     }
@@ -86,10 +92,12 @@ async function allocate(trip, io, decide) {
 async function refer(trip, io, decide) {
   if (terminal.includes(trip.status) || trip.status === "arrived_hospital") return;
   if (trip.hospital?.receivingReady) return;
+  const demoPatient = process.env.NODE_ENV !== "production" &&
+    (await db.user.findUnique({where:{id:trip.patientId},select:{email:true}}))?.email === "patient@sahay.org";
   const pending = trip.referrals.find(row => ["proposed", "accepted"].includes(row.status));
   if (pending) {
     const hospital = await db.hospital.findUnique({ where: { id: pending.hospitalId } });
-    const expired = pending.status === "proposed" && Date.now() - pending.createdAt.getTime() >= 120_000;
+    const expired = pending.status === "proposed" && Date.now() - pending.createdAt.getTime() >= (demoPatient ? 900_000 : 120_000);
     if (!expired && hospital?.receivingReady && (pending.status === "accepted" || hospital.bedsAvailable > 0)) return;
     await db.$transaction(async tx => {
       await append(tx, trip, event(expired ? "hospital:referral_expired" : "hospital:referral_unavailable", { hospitalId: pending.hospitalId }));
@@ -101,14 +109,13 @@ async function refer(trip, io, decide) {
     return;
   }
   const rejected = trip.referrals.filter(row => row.status === "rejected").map(row => row.hospitalId);
-  const expired = trip.events.filter(row => row.type === "hospital:referral_expired").map(row => row.payload.hospitalId);
+  const expired = demoPatient ? [] : trip.events.filter(row => row.type === "hospital:referral_expired").map(row => row.payload.hospitalId);
   const hospitals = await db.hospital.findMany({ where: { receivingReady: true, bedsAvailable: { gt: 0 },
     id: { notIn: [...rejected, ...expired, trip.hospitalId].filter(Boolean) } } });
   const candidates = hospitalCandidates(trip, hospitals).filter(row => row.eligible).slice(0, 8)
     .map(({ id, specialties, bedsAvailable, distanceKm: km }) => ({ id, specialties, bedsAvailable, simulatedTravelMinutes: Math.ceil(km * 2) }));
   if (!candidates.length) return;
-  const choice = await decideOnce("hospitalDecision", { candidates, requiredSpecialties: trip.triage?.requiredSpecialties || [], reasonCodes: ["travel_eta", "capacity", "specialty"], versions: candidates.map(row => hospitals.find(item => item.id === row.id).version) }, decide);
-  const selected = hospitals.find(row => row.id === (choice.output?.chosenId || candidates[0].id));
+  const selected = hospitals.find(row => row.id === candidates[0].id);
   await db.$transaction(async tx => {
     const current = await tx.trip.findUnique({ where: { id: trip.id }, include: { hospital: true } });
     if (terminal.includes(current.status) || current.status === "arrived_hospital" ||
@@ -120,8 +127,8 @@ async function refer(trip, io, decide) {
     if (!currentHospital.receivingReady || currentHospital.bedsAvailable <= 0 || currentHospital.version !== selected.version) return;
     const referral = await tx.hospitalReferral.create({ data: { tripId: trip.id, hospitalId: selected.id } });
     await append(tx, current, event("hospital:automatically_proposed", {
-      hospitalId: selected.id, referralId: referral.id, preferenceSource: choice.source,
-      reasonCode: choice.output?.reasonCode || "travel_eta",
+      hospitalId: selected.id, referralId: referral.id, preferenceSource: "deterministic",
+      reasonCode: "nearest_specialist_available",
     }));
   });
   notify(io, trip, selected.id);
@@ -164,6 +171,8 @@ async function project(trip, io, decide) {
 }
 
 async function processOrchestration(io, decide = explain, tripId) {
+  await require("./demoDrive").advanceDemoDrives(io);
+  await require("./demoHealthReadings").updateDemoHealth(io, tripId);
   const trips = await db.trip.findMany({
     where: { id: tripId, coverageState: { in: ["live", "limited"] }, OR: [
       { status: { notIn: terminal } }, { updatedAt: { gte: new Date(Date.now() - 3_600_000) } },
@@ -174,15 +183,21 @@ async function processOrchestration(io, decide = explain, tripId) {
   trips.sort((a, b) => priority(a) - priority(b));
   for (let i = 0; i < trips.length; i += 2) {
     await Promise.all(trips.slice(i, i + 2).map(async trip => {
-      const tasks = terminal.includes(trip.status) ? [] : [allocate(trip, io, decide), refer(trip, io, decide)];
-      const results = await Promise.allSettled(tasks);
-      for (const result of results) {
-        if (result.status === "rejected" && result.reason.status !== 409 && result.reason.code !== "P2002") {
-          console.error("[orchestration] allocation failed", result.reason.code || result.reason.name);
+      if (!terminal.includes(trip.status)) {
+        try {
+          await refer(trip, io, decide);
+          const current = await db.trip.findUnique({ where: { id: trip.id }, include });
+          if (current) await allocate(current, io, decide);
+        } catch (error) {
+          if (error.status !== 409 && error.code !== "P2002") console.error("[orchestration] allocation failed", error.code || error.name);
         }
       }
       const latest = await db.trip.findUnique({ where: { id: trip.id }, include });
-      if (latest) await project(latest, io, decide);
+      if (latest) {
+        try { await require("./specialistBooking").bookSpecialist(latest.id); }
+        catch (error) { if (error.status !== 409 && error.code !== "P2002") console.error("[specialist] booking failed", error.code || error.message); }
+        await project(latest, io, decide);
+      }
     }));
   }
 }

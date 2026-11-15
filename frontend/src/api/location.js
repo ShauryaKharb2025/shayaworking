@@ -33,76 +33,15 @@ export async function reverseGeocode(lat, lng) {
 }
 
 export async function detectLocation() {
-  // 1. Try browser geolocation with a strict 3s hard timeout
-  if (typeof navigator !== "undefined" && navigator.geolocation) {
-    try {
-      const pos = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("Browser GPS timeout")), 3000);
-        navigator.geolocation.getCurrentPosition(
-          (p) => {
-            clearTimeout(timer);
-            resolve(p);
-          },
-          (err) => {
-            clearTimeout(timer);
-            reject(err);
-          },
-          {
-            enableHighAccuracy: false, // Low accuracy is immediate on desktop/laptops
-            timeout: 2500,
-            maximumAge: 60000,
-          }
-        );
-      });
-
-      if (pos?.coords) {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const address = await reverseGeocode(lat, lng);
-        return { lat, lng, address };
-      }
-    } catch (geoErr) {
-      console.warn("Browser GPS not available or timed out, trying IP fallback:", geoErr);
-    }
+  if (!navigator.geolocation) throw new Error("GPS is unavailable. Enter your address or choose a pickup on the map.");
+  const position = await new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true, maximumAge: 0, timeout: 20000,
+    });
+  }).catch(() => { throw new Error("Could not obtain fresh GPS. Allow precise location, enter your address, or choose a map pin."); });
+  const { latitude: lat, longitude: lng, accuracy } = position.coords;
+  if (!Number.isFinite(accuracy) || accuracy > 100) {
+    throw new Error("GPS accuracy is too low. Enter your full address or place the pickup pin precisely on the map.");
   }
-
-  // 2. Try fast client-side IP providers
-  for (const url of ["https://freeipapi.com/api/json", "https://ipwho.is/"]) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) {
-        const data = await res.json();
-        const lat = data.latitude;
-        const lng = data.longitude;
-        if (lat && lng) {
-          const address = [
-            data.cityName || data.city,
-            data.regionName || data.region,
-            data.countryName || data.country,
-          ].filter(Boolean).join(", ");
-          return { lat, lng, address: address || `${lat.toFixed(4)}, ${lng.toFixed(4)}` };
-        }
-      }
-    } catch {}
-  }
-
-  // 3. Try Backend location API (bypasses browser adblockers and CORS)
-  try {
-    const res = await api.get("/location/detect");
-    if (res.data?.lat && res.data?.lng) {
-      return res.data;
-    }
-  } catch (e) {
-    console.warn("Backend location API unreachable:", e);
-  }
-
-  // 4. Guaranteed fallback so UI never hangs or errors
-  return {
-    lat: 28.6139,
-    lng: 77.2090,
-    address: "New Delhi, India",
-  };
+  return { lat, lng, accuracy, address: await reverseGeocode(lat, lng) };
 }

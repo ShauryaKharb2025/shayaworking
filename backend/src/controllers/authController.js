@@ -23,6 +23,7 @@ async function login(req, res) {
     }
     const user = await User.findOne({ email: cleanEmail });
 
+    if (!["patient","hospital","driver"].includes(user.role)) return res.status(403).json({ message: "Sign-in is available for patient, hospital and ambulance driver accounts." });
     if (!user.isActive) {
       return res.status(401).json({ message: "Account is inactive" });
     }
@@ -65,6 +66,7 @@ async function refresh(req, res) {
     const user = await User.findById(decoded.sub);
     if (!user) return res.status(401).json({ message: "User not found" });
 
+    if (!["patient","hospital","driver"].includes(user.role)) return res.status(403).json({ message: "This login role is unavailable" });
     if (!user.isActive) return res.status(401).json({ message: "Account is inactive" });
     const accessToken = signAccessToken(user);
     return res.json({ accessToken });

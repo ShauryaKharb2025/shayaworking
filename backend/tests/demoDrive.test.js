@@ -1,0 +1,55 @@
+const { test, after } = require("node:test");
+const assert = require("node:assert/strict");
+const { randomUUID } = require("node:crypto");
+const db = require("../src/data/prisma");
+const { beginDemoDrive, advanceDemoDrives, positionOnRoute } = require("../src/services/demoDrive");
+after(() => db.$disconnect());
+test("driver acceptance starts a shared simulation and pickup arrival is idempotent", async () => {
+ const tag=randomUUID();
+ const driver=await db.user.create({data:{name:tag,email:tag+"@test.invalid",role:"driver"}});
+ const operator=await db.operator.create({data:{name:tag,type:"ngo",verified:true}});
+ let vehicle,trip,hospital;
+ const originalFetch=global.fetch;
+ try {
+  vehicle=await db.ambulance.create({data:{vehicleNumber:tag,operatorId:operator.id,driverId:driver.id,status:"dispatched",location:{coordinates:[77,28]}}});
+  trip=await db.trip.create({data:{patientId:driver.id,ambulanceId:vehicle.id,status:"offered",pickupLocation:{coordinates:[77.1,28.1]}}});
+  global.fetch=async()=>({ok:false,json:async()=>({})});
+  await assert.rejects(beginDemoDrive(trip.id,"other"),{status:403});
+  await beginDemoDrive(trip.id,driver.id);
+  await assert.rejects(beginDemoDrive(trip.id,driver.id),{status:409});
+  let current=await db.trip.findUnique({where:{id:trip.id}});
+  assert.equal(current.status,"en_route");
+  assert.ok(current.events.some(row=>row.type==="status:dispatched"));
+  let events=current.events.map(row=>row.type==="journey:demo_drive_started"?{...row,at:new Date(Date.now()-30000).toISOString()}:row);
+  await db.trip.update({where:{id:trip.id},data:{events}});
+  await advanceDemoDrives();
+  const moved=await db.ambulance.findUnique({where:{id:vehicle.id}});
+  assert.ok(Math.abs(moved.location.coordinates[0]-77.1)<0.01);
+  assert.ok(Math.abs(moved.location.coordinates[1]-28.1)<0.01);
+  events=events.map(row=>row.type==="journey:demo_drive_started"?{...row,at:new Date(Date.now()-61000).toISOString()}:row);
+  await db.trip.update({where:{id:trip.id},data:{events}});
+  await advanceDemoDrives();
+  await advanceDemoDrives();
+  current=await db.trip.findUnique({where:{id:trip.id}});
+  assert.equal(current.status,"arrived_pickup");
+  assert.equal(current.events.filter(row=>row.type==="status:arrived_pickup").length,1);
+  assert.deepEqual((await db.ambulance.findUnique({where:{id:vehicle.id}})).location.coordinates,[77.1,28.1]);
+  hospital=await db.hospital.create({data:{name:tag+" hospital",receivingReady:true,location:{coordinates:[77.2,28.2]}}});
+  await db.trip.update({where:{id:trip.id},data:{status:"picked_up",hospitalId:hospital.id}});
+  await beginDemoDrive(trip.id,driver.id,"hospital");
+  current=await db.trip.findUnique({where:{id:trip.id}});
+  assert.equal(current.status,"en_route_hospital");
+  await db.trip.update({where:{id:trip.id},data:{events:current.events.map(row=>row.type==="journey:demo_hospital_drive_started"?{...row,at:new Date(Date.now()-61000).toISOString()}:row)}});
+  await advanceDemoDrives();
+  assert.equal((await db.trip.findUnique({where:{id:trip.id}})).status,"arrived_hospital");
+  assert.deepEqual((await db.ambulance.findUnique({where:{id:vehicle.id}})).location.coordinates,[77.2,28.2]);
+  assert.deepEqual(positionOnRoute([[77,28],[77.1,28.1]],1),[77.1,28.1]);
+ } finally {
+  global.fetch=originalFetch;
+  if(trip)await db.trip.delete({where:{id:trip.id}});
+  if(hospital)await db.hospital.delete({where:{id:hospital.id}});
+  if(vehicle)await db.ambulance.delete({where:{id:vehicle.id}});
+  await db.operator.delete({where:{id:operator.id}});
+  await db.user.delete({where:{id:driver.id}});
+ }
+});

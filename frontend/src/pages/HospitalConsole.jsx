@@ -7,6 +7,7 @@ import { connectSocket } from "../api/socket";
 export default function HospitalConsole() {
   const { user } = useAuth();
   const [trips, setTrips] = useState([]);
+  const [hospitalName,setHospitalName]=useState("");
 
   // Bed availability
   const [ready, setReady] = useState(false);
@@ -14,6 +15,7 @@ export default function HospitalConsole() {
   const [beds, setBeds] = useState(0);
   const [savingBeds, setSavingBeds] = useState(false);
   const [bedMessage, setBedMessage] = useState("");
+  const [incomingError,setIncomingError]=useState("");
 
   const hospitalId = user?.hospital;
 
@@ -23,8 +25,8 @@ export default function HospitalConsole() {
     function loadIncoming() {
       return api
       .get(`/hospitals/${hospitalId}/incoming`)
-      .then(({ data }) => setTrips(data.trips))
-      .catch((err) => setBedMessage(err.response?.data?.message || "Could not load incoming cases."));
+      .then(({ data }) => {setTrips(data.trips);setIncomingError("");})
+      .catch((err) => setIncomingError(err.response?.data?.message || "Could not load incoming cases."));
     }
     loadIncoming();
 
@@ -37,6 +39,7 @@ export default function HospitalConsole() {
         );
 
         if (hospital) {
+          setHospitalName(hospital.name);
           setBeds(hospital.bedsAvailable ?? 0);
           setReady(hospital.receivingReady);
           setSpecialties(hospital.specialties.join(", "));
@@ -51,7 +54,11 @@ export default function HospitalConsole() {
     socket.on("hospital:pre_alert", loadIncoming);
     socket.on("case:refresh", loadIncoming);
 
+  const refreshTimer = setInterval(loadIncoming, 10000);
+  socket.on("connect", loadIncoming);
     return () => {
+    clearInterval(refreshTimer);
+    socket.off("connect", loadIncoming);
       socket.off("hospital:pre_alert", loadIncoming);
       socket.off("case:refresh", loadIncoming);
     };
@@ -84,139 +91,35 @@ export default function HospitalConsole() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-12">
-      <p className="text-sm font-medium text-signal-dark">ER console</p>
-
-      <h1 className="mt-2 font-display text-3xl font-semibold text-navy">
-        Incoming, pre-alerted
-      </h1>
-
-      <p className="mt-2 text-sm text-ink/60">
-        Vitals, ETA and specialty need arrive before the ambulance does.
-      </p>
-
-      {hospitalId && <>
-        <HospitalReferrals />
-        <label className="block"><input type="checkbox" checked={ready} onChange={event => setReady(event.target.checked)} /> Receiving team ready</label>
-        <label className="block">Specialties <input value={specialties} onChange={event => setSpecialties(event.target.value)} /></label>
-      </>}
-      {!hospitalId && (
-        <p className="mt-6 rounded-lg bg-amber/10 px-4 py-3 text-sm text-amber">
-          Your account isn't linked to a hospital yet — an admin needs to set{" "}
-          <code>user.hospital</code>.
-        </p>
-      )}
-
-      {/* Hospital bed availability */}
-      {hospitalId && (
-        <div className="mt-8 rounded-xl border border-line bg-white p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-ink/50">
-                ER bed availability
-              </p>
-
-              <p className="mt-1 text-3xl font-semibold text-navy">
-                {beds}
-              </p>
-
-              <p className="mt-1 text-xs text-ink/40">
-                Currently available emergency beds
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setBeds((prev) => Math.max(0, prev - 1))}
-                disabled={savingBeds}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-line text-xl text-navy hover:bg-paper disabled:opacity-50"
-              >
-                −
-              </button>
-
-              <span className="min-w-12 text-center text-lg font-semibold text-navy">
-                {beds}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setBeds((prev) => prev + 1)}
-                disabled={savingBeds}
-                className="flex h-10 w-10 items-center justify-center rounded-lg border border-line text-xl text-navy hover:bg-paper disabled:opacity-50"
-              >
-                +
-              </button>
-
-              <button
-                type="button"
-                onClick={updateBeds}
-                disabled={savingBeds}
-                className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {savingBeds ? "Updating..." : "Update"}
-              </button>
-            </div>
-          </div>
-
-          {bedMessage && (
-            <p className="mt-3 text-sm text-ink/60">
-              {bedMessage}
-            </p>
-          )}
+    <div className="sahay-role-workspace">
+      <header className="sahay-role-heading"><p>Hospital console</p><h1>Incoming patients</h1><p>Review receiving requests, prepare the team and follow ambulance handovers.</p></header>
+      {!hospitalId ? <p role="status">Your account needs a hospital link before receiving requests.</p> :
+      <div className="sahay-hospital-layout">
+        <div className="sahay-hospital-cases">
+          <HospitalReferrals/>
+          <section className="sahay-card sahay-role-card"><h2>Arrivals at your linked hospital</h2>
+            {incomingError && <p role="alert">{incomingError}</p>}
+            {!incomingError && !trips.length && <p>No confirmed arrivals. Review the receiving requests above.</p>}
+            <div className="sahay-arrival-grid">{trips.map(trip=><article key={trip._id} className="sahay-arrival-card">
+              <h3>{trip.patient?.name || "Patient name unavailable"}</h3>
+              <p>{trip.status?.replaceAll("_"," ")}</p>
+              <dl><div><dt>Ambulance</dt><dd>{trip.ambulance?.vehicleNumber || "Awaiting assignment"}</dd></div>
+                <div><dt>ETA</dt><dd>{trip.etaMinutes!=null ? trip.etaMinutes+" min" : "Unavailable"}</dd></div></dl>
+            </article>)}</div>
+          </section>
         </div>
-      )}
-
-      {/* Existing incoming trips */}
-      <div className="mt-8 space-y-4">
-        {trips.length === 0 && hospitalId && (
-          <p className="text-sm text-ink/40">
-            No incoming patients right now.
-          </p>
-        )}
-
-        {trips.map((t) => (
-          <div
-            key={t._id}
-            className="rounded-xl border border-line bg-white p-5"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-navy">
-                {t.patient?.name || "Unknown patient"}
-              </h3>
-
-              <span className="text-sm font-medium text-signal-dark">
-                {t.etaMinutes
-                  ? `${t.etaMinutes} min ETA`
-                  : "ETA pending"}
-              </span>
-            </div>
-
-            <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-              <div>
-                <p className="text-ink/40">Urgency</p>
-                <p className="capitalize text-navy">
-                  {t.triage?.urgencyTier || "—"}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-ink/40">Ambulance</p>
-                <p className="text-navy">
-                  {t.ambulance?.vehicleNumber || "—"}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-ink/40">Equipment on board</p>
-                <p className="text-navy">
-                  {(t.triage?.suggestedEquipment || []).join(", ") || "—"}
-                </p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+        <aside className="sahay-card sahay-role-card sahay-capacity-card">
+          <h2>Hospital availability</h2><p>{hospitalName || "Linked hospital"}</p>
+          <label className="sahay-care-check"><input type="checkbox" checked={ready} onChange={event=>setReady(event.target.checked)}/>Accepting emergency arrivals</label>
+          <label>Specialties<textarea value={specialties} onChange={event=>setSpecialties(event.target.value)} rows={3}/></label>
+          <label htmlFor="available-beds">Available ER beds</label>
+          <div className="sahay-bed-control"><button type="button" aria-label="Decrease available beds" disabled={beds<=0 || savingBeds} onClick={()=>setBeds(value=>Math.max(0,value-1))}>−</button>
+            <input id="available-beds" type="number" min={0} max={100000} step={1} value={beds} onChange={event=>setBeds(event.target.value===""?"":Number(event.target.value))}/>
+            <button type="button" aria-label="Increase available beds" disabled={savingBeds} onClick={()=>setBeds(value=>Number(value)+1)}>+</button></div>
+          <button type="button" className="sahay-button dark" disabled={savingBeds || !Number.isSafeInteger(beds) || beds<0 || beds>100000} onClick={updateBeds}>{savingBeds?"Saving…":"Save availability"}</button>
+          {bedMessage&&<p role="status">{bedMessage}</p>}
+        </aside>
+      </div>}
     </div>
   );
 }

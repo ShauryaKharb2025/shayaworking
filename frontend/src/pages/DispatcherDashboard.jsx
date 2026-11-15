@@ -61,7 +61,11 @@ export default function DispatcherDashboard() {
     socket.on("trip:assigned", handleTripUpdate);
     socket.on("trip:status", handleTripUpdate);
 
+  const refreshTimer = setInterval(loadData, 10000);
+  socket.on("connect", loadData);
     return () => {
+    clearInterval(refreshTimer);
+    socket.off("connect", loadData);
       socket.off("fleet:update", handleFleetUpdate);
       socket.off("dispatch:new", handleTripUpdate);
       socket.off("case:refresh", loadData);

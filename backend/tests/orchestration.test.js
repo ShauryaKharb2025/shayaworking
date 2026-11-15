@@ -7,7 +7,7 @@ const { explain } = require("../src/services/geminiIntelligence");
 
 after(() => db.$disconnect());
 
-test("automatic worker uses validated preference, expires a reservation, and persists grounded highlights", async () => {
+test("automatic worker prioritizes nearest eligible vehicle, expires a reservation, and persists grounded highlights", async () => {
   const tag = randomUUID();
   const driver = await db.user.create({ data: { name: tag, email: tag + "@test.invalid", role: "driver" } });
   const second = await db.user.create({ data: { name: tag, email: tag + "-2@test.invalid", role: "driver" } });
@@ -41,13 +41,13 @@ test("automatic worker uses validated preference, expires a reservation, and per
     await processOrchestration(null, decide, trip.id);
     const offered = await read();
     assert.equal(offered.status, "offered");
-    assert.equal(offered.ambulanceId, preferred.id);
+    assert.equal(offered.ambulanceId, first.id);
     assert.equal(offered.hospitalId, null);
     assert.equal(offered.referrals[0].hospitalId, hospital.id);
     assert.equal(offered.referrals[0].status, "proposed");
     assert.equal(offered.journeyProjection.coordination, "monitor_acknowledgement");
     assert.ok(offered.events.some(row => offered.journeyProjection.summary.highlights.includes(row._id)));
-    assert.equal(called.size, 4);
+    assert.equal(called.size, 2);
     let calls = 0;
     await processOrchestration(null, () => { calls++; }, trip.id);
     assert.equal(calls, 0);
@@ -55,9 +55,9 @@ test("automatic worker uses validated preference, expires a reservation, and per
     const fallback = async () => ({ source: "deterministic", reason: "disabled" });
     await processOrchestration(null, fallback, trip.id);
     assert.equal((await read()).status, "requested");
-    assert.equal((await db.ambulance.findUnique({ where: { id: preferred.id } })).status, "idle");
+    assert.equal((await db.ambulance.findUnique({ where: { id: first.id } })).status, "idle");
     await processOrchestration(null, fallback, trip.id);
-    assert.equal((await read()).ambulanceId, first.id);
+    assert.equal((await read()).ambulanceId, preferred.id);
   } finally {
     await db.hospitalReferral.deleteMany({ where: { tripId: trip.id } });
     await db.trip.delete({ where: { id: trip.id } });

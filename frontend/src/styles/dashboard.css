@@ -7,7 +7,7 @@
 .sahay-map{position:relative;min-height:405px;border-radius:18px;overflow:hidden;border:1px solid #dce3ed;background:#eef0ed;isolation:isolate}.sahay-map-canvas{position:absolute;inset:0;z-index:0}.sahay-map-live{position:absolute;top:13px;left:13px;z-index:600;display:flex;align-items:center;gap:8px;background:#ffffffed;border:1px solid #e7eaf0;border-radius:11px;padding:10px 13px;box-shadow:0 2px 6px #0c1e3610;font-size:10px;font-weight:650}.sahay-map-live>i{width:9px;height:9px;background:#24a05b;border-radius:50%}.sahay-map-live>i.offline{background:#cb8f2a}.sahay-map-live>span{color:#228849;font-size:9px;margin-left:8px}.sahay-map-caption{position:absolute;bottom:23px;left:10px;z-index:600;background:#ffffffed;border:1px solid #e2e5ec;border-radius:8px;padding:8px 11px;font-size:9px;color:#47546b;max-width:90%}.sahay-map-marker{width:36px!important;height:36px!important;border:3px solid white;border-radius:50% 50% 50% 0;background:#d51f39;color:white;font-weight:800;text-align:center;line-height:30px;box-shadow:0 3px 8px #95203140;font-size:22px;transform:rotate(-45deg)}.sahay-map-marker.vehicle{background:white;color:#c9263b;border-color:#152744;border-radius:9px;font-size:25px;line-height:30px}.leaflet-tooltip{font-family:inherit!important;border:0!important;box-shadow:0 3px 10px #0d1c3820!important;border-radius:9px!important;padding:8px 12px!important;font-weight:650;font-size:11px!important}.sahay-map-fallback{position:absolute;inset:60px 30px;z-index:500;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:12px;background:#eef1f4e8;border-radius:14px;padding:25px}.sahay-map-fallback span{font-size:12px;color:#5d6980}.leaflet-control-zoom{border:1px solid #e3e7ee!important;border-radius:12px!important;overflow:hidden;box-shadow:0 4px 9px #17274120!important;margin:13px!important}.leaflet-control-zoom a{border-color:#eff1f5!important;width:34px!important;height:34px!important;line-height:34px!important;color:#17233d!important}
 .sahay-case-column{display:flex;flex-direction:column;gap:20px;min-width:0}.sahay-case-summary{padding:20px 17px}.sahay-case-summary>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:8px}.sahay-muted{color:#536079;font-size:13px}.sahay-case-summary h2{font-size:20px;margin-top:5px}.sahay-case-badge{display:flex;align-items:center;gap:7px;background:#fbe8ec;color:#cc1a32;border-radius:30px;padding:9px 12px;font-size:11px;white-space:nowrap}.sahay-status{display:flex;align-items:center;gap:5px;flex-wrap:wrap;background:linear-gradient(130deg,#e0f8e9,#eafaf0);border-radius:12px;padding:13px 12px;font-size:12px;margin-top:22px;line-height:1.5}.sahay-status>span{border-radius:50%;color:white;background:#28a253;width:17px;height:17px;display:grid;place-items:center;font-size:13px;font-family:Georgia;margin-right:3px;font-weight:800}.sahay-status.cancelled{background:#fcebed}.sahay-timeline{padding:22px 20px;flex:1}.sahay-timeline h2{font-size:21px}.sahay-timeline ol{list-style:none;padding:0;margin:26px 0 0}.sahay-timeline li{position:relative;display:flex;gap:14px;min-height:79px;padding-left:2px}.sahay-timeline-node{height:21px;width:21px;border:2px solid #bbc3d0;border-radius:50%;background:#fff;flex-shrink:0;z-index:1;display:grid;place-items:center;margin-top:2px}.sahay-timeline li:not(:last-child):before{content:"";position:absolute;left:12px;top:24px;bottom:0;width:2px;background:#dbe0e8}.sahay-timeline li.complete .sahay-timeline-node{background:#28a25a;color:white;border-color:#28a25a}.sahay-timeline li.complete:before{background:#55b97a}.sahay-timeline li.current .sahay-timeline-node{border-color:#169b4b;box-shadow:inset 0 0 0 3px white;background:#169b4b}.sahay-timeline li>div{flex:1;padding:0 0 18px;min-width:0}.sahay-timeline li.current>div{background:linear-gradient(135deg,#f6f8fc,#edf2fa);border-radius:12px;padding:10px 10px 13px;margin:-8px -10px 14px 0}.sahay-timeline li>div>div{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.sahay-timeline strong{font-size:13px;letter-spacing:-.2px;line-height:1.4}.sahay-timeline time{font-size:10px;color:#485974;white-space:nowrap}.sahay-timeline p{font-size:11px;color:#506078;line-height:1.5;margin:4px 0 0}.sahay-timeline-foot{border-top:1px solid #e8ecf2;padding-top:12px;font-size:10px!important}
 .sahay-summary-grid{display:grid;grid-template-columns:1fr 1fr 1.55fr 1.2fr .8fr;gap:14px;margin-top:25px}.sahay-summary{display:flex;gap:15px;align-items:center;padding:18px 20px;min-height:88px;min-width:0}.sahay-summary>svg{width:30px;height:30px;color:#243c60;flex-shrink:0;stroke-width:1.7}.sahay-summary>div{min-width:0}.sahay-summary span{display:block;font-size:12px;margin-bottom:5px;line-height:1.4}.sahay-summary strong{display:block;font-size:19px;font-weight:750;letter-spacing:-.35px;line-height:1.35;overflow-wrap:anywhere}.sahay-summary strong.small{font-size:12px;font-weight:450;letter-spacing:0}.sahay-summary:nth-child(2) strong{font-size:14px;font-weight:450}.sahay-workspace-footer{display:flex;justify-content:space-between;gap:15px;margin-top:18px;font-size:10px;color:#778298}.sahay-workspace-footer>span{display:flex;align-items:center;gap:5px}.sahay-workspace-footer a{font-weight:700;color:#425571}.sahay-alert{background:#fff0f0;border:1px solid #ffd7dc;color:#a51d30;border-radius:12px;padding:13px 18px;margin-bottom:16px;display:flex;justify-content:space-between;gap:16px;line-height:1.5}.sahay-alert button{font-size:22px;line-height:1}.sahay-medical-note{display:flex;gap:14px;padding:18px;margin-top:15px;border:1px solid #dce5f1;border-radius:14px;background:#f3f7fd;align-items:center}.sahay-medical-note svg{flex-shrink:0}.sahay-medical-note p{margin:5px 0 0;font-size:12px;color:#5c6980;line-height:1.5}.sahay-medical-note button{margin-left:auto;font-size:12px;white-space:nowrap;text-decoration:underline}
-.sahay-legacy{padding:24px;max-width:1550px;margin:auto}.sahay-legacy>div{max-width:100%!important;padding:16px 0!important}.sahay-legacy h1{font-family:inherit;font-size:28px!important;letter-spacing:-.7px}.sahay-legacy h2,.sahay-legacy h3{font-family:inherit}.sahay-legacy .bg-paper{background:#f5f8fd}.sahay-legacy .rounded-full{border-radius:10px}.sahay-legacy button,.sahay-legacy input,.sahay-legacy select,.sahay-legacy textarea{font-family:inherit}.sahay-legacy .bg-white{border-color:#e2e7f0;box-shadow:0 3px 15px #10234004}.sahay-role-header{display:flex;align-items:center;gap:14px;margin-bottom:26px}.sahay-role-header>svg{width:38px;height:38px;color:#253f65}.sahay-role-header h1{font-size:28px;font-weight:750;letter-spacing:-.7px}.sahay-role-header p{color:#657189;margin:5px 0 0}.sahay-role-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:22px}.sahay-role-stat{padding:20px}.sahay-role-stat>span{font-size:12px;color:#65718b}.sahay-role-stat>strong{display:block;font-size:28px;margin-top:8px}.sahay-role-preview-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}.sahay-role-preview-grid>.sahay-card{padding:24px}.sahay-role-preview-grid p{line-height:1.7;color:#647089;font-size:13px;margin-top:12px}.sahay-role-preview-grid ul{margin:22px 0;padding:0;list-style:none}.sahay-role-preview-grid li{border-bottom:1px solid #edf0f5;padding:14px 0;display:flex;justify-content:space-between;gap:12px}.sahay-role-preview-grid li span{color:#5e6b83;font-size:12px}.sahay-role-preview-grid .sahay-map{min-height:340px;margin-top:22px}.sahay-role-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.sahay-role-placeholder{padding:35px;max-width:650px;margin:50px auto}.sahay-role-placeholder>svg{color:#364d70;width:40px;height:40px;margin-bottom:20px}.sahay-role-placeholder h1{font-size:27px;font-weight:750}.sahay-role-placeholder p{color:#62708a;line-height:1.8;margin:14px 0 24px}.sahay-role-placeholder .sahay-button{margin-right:8px}
+.sahay-legacy{padding:24px;max-width:1550px;margin:auto}.sahay-legacy>div:not(.sahay-role-workspace):not(.sahay-login-card){max-width:100%;padding:16px 0}.sahay-legacy h1{font-family:inherit;font-size:28px!important;letter-spacing:-.7px}.sahay-legacy h2,.sahay-legacy h3{font-family:inherit}.sahay-legacy .bg-paper{background:#f5f8fd}.sahay-legacy .rounded-full{border-radius:10px}.sahay-legacy button,.sahay-legacy input,.sahay-legacy select,.sahay-legacy textarea{font-family:inherit}.sahay-legacy .bg-white{border-color:#e2e7f0;box-shadow:0 3px 15px #10234004}.sahay-role-header{display:flex;align-items:center;gap:14px;margin-bottom:26px}.sahay-role-header>svg{width:38px;height:38px;color:#253f65}.sahay-role-header h1{font-size:28px;font-weight:750;letter-spacing:-.7px}.sahay-role-header p{color:#657189;margin:5px 0 0}.sahay-role-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:22px}.sahay-role-stat{padding:20px}.sahay-role-stat>span{font-size:12px;color:#65718b}.sahay-role-stat>strong{display:block;font-size:28px;margin-top:8px}.sahay-role-preview-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}.sahay-role-preview-grid>.sahay-card{padding:24px}.sahay-role-preview-grid p{line-height:1.7;color:#647089;font-size:13px;margin-top:12px}.sahay-role-preview-grid ul{margin:22px 0;padding:0;list-style:none}.sahay-role-preview-grid li{border-bottom:1px solid #edf0f5;padding:14px 0;display:flex;justify-content:space-between;gap:12px}.sahay-role-preview-grid li span{color:#5e6b83;font-size:12px}.sahay-role-preview-grid .sahay-map{min-height:340px;margin-top:22px}.sahay-role-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}.sahay-role-placeholder{padding:35px;max-width:650px;margin:50px auto}.sahay-role-placeholder>svg{color:#364d70;width:40px;height:40px;margin-bottom:20px}.sahay-role-placeholder h1{font-size:27px;font-weight:750}.sahay-role-placeholder p{color:#62708a;line-height:1.8;margin:14px 0 24px}.sahay-role-placeholder .sahay-button{margin-right:8px}
 @media(min-width:1600px){.sahay-workspace{padding:38px 30px 20px}.sahay-header{gap:34px}.sahay-service{min-height:90px}.sahay-incident-map{grid-template-columns:minmax(300px,.95fr) minmax(0,1.6fr)}.sahay-incident{padding:20px}.sahay-incident>label{font-size:14px}.sahay-incident textarea,.sahay-input-icon input{font-size:14px}.sahay-type-options label{font-size:13px}.sahay-incident legend{font-size:14px}.sahay-map{min-height:420px}.sahay-timeline strong{font-size:15px}.sahay-timeline p{font-size:13px}.sahay-timeline time{font-size:12px}.sahay-timeline li{min-height:84px}.sahay-stepper strong{font-size:15px}.sahay-summary strong{font-size:22px}.sahay-case-summary{padding:22px}.sahay-summary span{font-size:14px}.sahay-summary strong.small{font-size:14px}}
 @media(max-width:1350px){.sahay-tagline{display:none}.sahay-header{gap:25px;padding:0 24px}.sahay-topnav{gap:26px}.sahay-sidebar{width:185px}.sahay-sidebar nav a{font-size:14px;padding:16px 12px;gap:15px}.sahay-main{margin-left:185px}.sahay-workspace{padding:26px 20px 16px}.sahay-dashboard-grid{grid-template-columns:minmax(0,2fr) minmax(265px,.9fr);gap:16px}.sahay-service{padding:17px 15px;gap:13px}.sahay-service strong{font-size:17px}.sahay-service small{font-size:10px}.sahay-service>svg:first-child{width:31px}.sahay-stepper{padding:13px 15px}.sahay-stepper>div{gap:7px}.sahay-stepper strong{font-size:11px}.sahay-stepper>div>span{width:30px;height:30px;font-size:14px}.sahay-incident-map{grid-template-columns:minmax(240px,.95fr) minmax(0,1.25fr)}.sahay-card h2{font-size:18px}.sahay-summary{padding:15px 12px;gap:10px}.sahay-summary strong{font-size:16px}.sahay-summary span{font-size:10px}.sahay-timeline{padding:20px 15px}.sahay-case-summary{padding:18px 14px}.sahay-case-summary h2{font-size:17px}.sahay-case-badge{font-size:10px;padding:8px}.sahay-status{font-size:11px}}
 @media(max-width:1100px){.sahay-dashboard-grid{grid-template-columns:1fr}.sahay-case-column{display:grid;grid-template-columns:1fr 2fr;align-items:start}.sahay-timeline ol{display:grid;grid-template-columns:1fr 1fr;gap:12px}.sahay-timeline li:before{display:none}.sahay-timeline li{min-height:65px}.sahay-summary-grid{grid-template-columns:repeat(3,1fr)}.sahay-mode{display:none}.sahay-service strong{font-size:19px}.sahay-stepper strong{font-size:13px}.sahay-incident-map{grid-template-columns:minmax(270px,.85fr) minmax(0,1.5fr)}.sahay-map{min-height:390px}.sahay-case-column .sahay-case-summary{height:100%}.sahay-topnav{gap:20px}.sahay-brand strong{font-size:22px}}
@@ -43,3 +43,196 @@
 .sahay-fleet-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px}
 .sahay-fleet-item strong{color:#0f172a}
 .sahay-fleet-item span{color:#64748b}
+
+/* Keep the journey summary and map in the same incident-grid column. */
+.sahay-incident-map { align-items: stretch; }
+.sahay-map-column { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.sahay-map-column > .sahay-map { flex: 1; min-height: 420px; }
+.sahay-transport-summary { padding: 16px 18px; }
+.sahay-transport-summary h2 { font-size: 17px; line-height: 1.4; }
+.sahay-transport-summary p { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: #43536f; }
+.sahay-map-route-button { position: absolute; right: 12px; bottom: 68px; z-index: 600; background: white; font-size: 12px; box-shadow: 0 2px 8px #0c1e3620; }
+.sahay-map-live { max-width: calc(100% - 78px); flex-wrap: wrap; }
+.sahay-map-caption { overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .sahay-map-column > .sahay-map { min-height: 380px; }
+  .sahay-transport-summary { padding: 15px; }
+  .sahay-map-live { padding: 8px 10px; }
+  .sahay-map-live > span { display: none; }
+}
+
+.sahay-care-panel { padding: 20px; margin-top: 18px; min-width: 0; font-size: 13px; line-height: 1.6; }
+.sahay-care-panel > p { margin: 10px 0; overflow-wrap: anywhere; }
+.sahay-care-next { display: grid; gap: 4px; padding: 14px; margin-top: 16px; background: #edf5ff; border-radius: 12px; }
+.sahay-care-section { border-top: 1px solid #e2e7f0; padding-top: 16px; margin-top: 18px; }
+.sahay-care-heading { display: flex; justify-content: space-between; gap: 12px; }
+.sahay-care-section h3 { font-size: 15px; font-weight: 700; margin: 0 0 10px; }
+.sahay-care-values { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.sahay-care-values dt { color: #68758b; font-size: 12px; }
+.sahay-care-values dd { margin: 0; overflow-wrap: anywhere; }
+.sahay-care-form { display: grid; gap: 12px; }
+.sahay-care-form label { display: grid; gap: 5px; }
+.sahay-care-form input:not([type=checkbox]),.sahay-care-form select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #cbd4e4; border-radius: 8px; background: white; }
+.sahay-care-form .sahay-care-check { display: flex; align-items: center; gap: 10px; }
+.sahay-care-actions { display: flex; flex-wrap: wrap; gap: 14px; }
+.sahay-care-heading button,.sahay-care-actions button { border: 1px solid #cbd4e4; border-radius: 8px; padding: 7px 12px; background: white; }
+.sahay-care-checklist { list-style: none; padding: 0; display: grid; gap: 7px; margin: 12px 0; }
+.sahay-care-delay { padding: 12px; background: #fff3da; border-radius: 8px; }
+@media(max-width:560px) { .sahay-care-values {grid-template-columns: 1fr;} .sahay-care-panel {padding:16px;} }
+
+.sahay-care-check { display:flex; gap:9px; align-items:center; }
+.sahay-reading-scroll { overflow-x:auto; margin-top:12px; }
+.sahay-reading-table { width:100%; border-collapse:collapse; font-size:12px; text-align:left; }
+.sahay-reading-table th,.sahay-reading-table td { padding:10px; border-bottom:1px solid #e2e7f0; vertical-align:top; min-width:85px; }
+.sahay-reading-table th { background:#f3f6fc; }
+
+
+/* Shared responsive workspace proportions and controls. */
+.sahay-app { overflow-wrap: break-word; }
+.sahay-main,.sahay-primary,.sahay-hospital-cases,.sahay-driver-case,.sahay-driver-vehicle { min-width: 0; }
+.sahay-workspace { max-width: 1720px; padding: 28px clamp(16px,2vw,32px); container-type: inline-size; }
+.sahay-dashboard-grid { grid-template-columns: minmax(0,1fr) minmax(300px,340px); gap: 24px; align-items: start; }
+.sahay-incident-map { grid-template-columns: minmax(270px,320px) minmax(0,1fr); gap: 18px; }
+.sahay-summary-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.sahay-summary { min-width:0; overflow-wrap:anywhere; }
+.sahay-summary:nth-child(3) { grid-column:auto; grid-row:auto; }
+.sahay-case-summary h2 { overflow-wrap:anywhere; }
+.sahay-case-column .sahay-case-summary { height:auto; }
+.sahay-sidebar { padding-top:28px; overflow-y:auto; }
+.sahay-sidebar nav a { white-space:normal; font-size:14px; line-height:1.4; gap:12px; min-height:56px; padding:14px 12px; }
+.sahay-sidebar-bottom { flex-shrink:0; }
+.sahay-app button:disabled { cursor:not-allowed; }
+.sahay-app button,.sahay-app summary { touch-action:manipulation; }
+.sahay-app summary { cursor:pointer; padding:12px 0; line-height:1.5; }
+.sahay-app input:not([type=checkbox]):not([type=radio]),.sahay-app select,.sahay-app textarea { min-width:0; max-width:100%; }
+.sahay-notification-popover { width:min(320px,calc(100vw - 24px)); right:12px; }
+.sahay-input-icon { flex-wrap:wrap; padding:8px 10px; }
+.sahay-input-icon input { flex:1; min-width:110px; }
+.sahay-detect-btn { min-height:34px; }
+.sahay-incident > .sahay-button { margin-top:12px; }
+.sahay-incident .sahay-confirm { min-height:48px; }
+.sahay-stepper strong { white-space:normal; line-height:1.4; }
+.sahay-map-route-button { max-width:calc(100% - 24px); }
+.sahay-map-live { line-height:1.5; }
+.sahay-map-caption { bottom:24px; max-width:calc(100% - 24px); padding:7px 10px; }
+.sahay-role-workspace { max-width:1440px; width:100%; margin:auto; min-width:0; }
+.sahay-role-heading { display:block; position:static; background:none; box-shadow:none; padding:0; margin:0 0 24px; border:0; }
+.sahay-role-heading h1 { margin:6px 0 10px; font-weight:700; }
+.sahay-role-heading p { color:#53617a; font-size:14px; line-height:1.6; margin:0; }
+.sahay-role-heading p:first-child { color:#18794e; font-weight:600; }
+.sahay-hospital-layout { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:start; margin-top:24px; }
+.sahay-hospital-cases > section:first-child { margin-top:0; padding:20px; border-radius:18px; background:white; }
+.sahay-hospital-cases > section:first-child > label { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; }
+.sahay-hospital-cases select,.sahay-role-card textarea { border:1px solid #cbd4e4; border-radius:9px; padding:10px 12px; background:white; }
+.sahay-referral-card { padding:20px 0; border-top:1px solid #e2e7f0; min-width:0; }
+.sahay-referral-card > p { margin:7px 0; line-height:1.6; overflow-wrap:anywhere; }
+.sahay-referral-card > button { margin:8px 10px 8px 0; }
+.sahay-role-card { padding:22px; }
+.sahay-role-card > p { margin:12px 0; line-height:1.6; color:#53617a; }
+.sahay-capacity-card { display:flex; flex-direction:column; gap:16px; }
+.sahay-capacity-card label { display:grid; gap:8px; font-size:13px; font-weight:600; }
+.sahay-capacity-card .sahay-care-check { display:flex; font-weight:400; }
+.sahay-capacity-card input[type=checkbox] { width:18px; height:18px; flex-shrink:0; }
+.sahay-capacity-card textarea { width:100%; resize:vertical; }
+.sahay-bed-control { display:grid; grid-template-columns:44px minmax(0,1fr) 44px; gap:8px; }
+.sahay-bed-control button,.sahay-bed-control input { min-height:44px; text-align:center; border:1px solid #cbd4e4; border-radius:9px; background:white; }
+.sahay-arrival-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:16px; }
+.sahay-arrival-card { padding:16px; border:1px solid #e2e7f0; border-radius:12px; min-width:0; }
+.sahay-arrival-card p { margin:8px 0; color:#53617a; }
+.sahay-arrival-card dl { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.sahay-arrival-card dt { color:#68758b; font-size:12px; }
+.sahay-arrival-card dd { margin:0; overflow-wrap:anywhere; }
+.sahay-driver-layout { display:grid; grid-template-columns:minmax(260px,320px) minmax(0,1fr); gap:24px; align-items:start; margin-top:24px; }
+.sahay-driver-workspace > h1 { margin-top:8px; }
+.sahay-driver-workspace > p { line-height:1.6; }
+.sahay-driver-vehicle,.sahay-driver-case { padding:22px; }
+.sahay-driver-case .sahay-map { min-height:440px; margin-top:20px; }
+.sahay-driver-case .flex.flex-wrap.gap-2 { gap:12px; }
+.sahay-role-workspace button:not([class]),.sahay-care-panel button:not([class]) { padding:10px 14px; border:1px solid #cad4e5; border-radius:9px; background:#f5f8ff; color:#12233f; min-height:42px; font-weight:600; }
+.sahay-role-workspace form:not(.sahay-care-form) label { display:grid; gap:6px; }
+.sahay-role-workspace form:not(.sahay-care-form) input:not([type=checkbox]),.sahay-role-workspace form:not(.sahay-care-form) textarea,.sahay-role-workspace form:not(.sahay-care-form) select { width:100%; padding:10px 12px; border:1px solid #cbd4e4; border-radius:9px; background:white; min-height:44px; }
+.sahay-care-actions { margin-top:6px; }
+.sahay-care-values { gap:16px; }
+.sahay-care-check input { width:18px; height:18px; flex-shrink:0; }
+.sahay-care-heading { align-items:flex-start; }
+.sahay-care-heading h3 { flex:1; }
+.sahay-care-section ul { overflow-wrap:anywhere; }
+.sahay-reading-table th { white-space:nowrap; }
+.sahay-auth .sahay-sidebar,.sahay-auth .mobile-menu,.sahay-auth .sahay-topnav { display:none; }
+.sahay-auth .sahay-main { margin-left:0; }
+.sahay-auth .sahay-header-actions { margin-left:auto; }
+.sahay-auth .sahay-legacy { max-width:100%; padding:clamp(24px,6vh,72px) 16px; }
+.sahay-legacy > .sahay-login-card { width:100%; max-width:480px; min-height:0; padding:32px; margin:0 auto; background:white; border:1px solid #dce3ee; border-radius:20px; box-shadow:0 12px 40px #12234008; }
+.sahay-demo-accounts { display:grid; gap:10px; margin-top:14px; }
+.sahay-demo-accounts button { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:48px; }
+.sahay-demo-accounts button > div:first-child { flex-shrink:0; }
+.sahay-demo-accounts button > div:last-child { text-align:right; }
+@media(max-width:1280px) {
+ .sahay-dashboard-grid { grid-template-columns:minmax(0,1fr); }
+ .sahay-case-column { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+ .sahay-case-column > * { margin:0; min-width:0; }
+ .sahay-case-column > :last-child { grid-column:1/-1; }
+ .sahay-hospital-layout { grid-template-columns:minmax(0,1fr) 260px; gap:18px; }
+ .sahay-driver-layout { grid-template-columns:260px minmax(0,1fr); gap:18px; }
+}
+@media(max-width:1000px) {
+ .sahay-hospital-layout,.sahay-driver-layout { grid-template-columns:minmax(0,1fr); }
+ .sahay-driver-vehicle { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+ .sahay-driver-vehicle > * { margin-top:0; }
+ .sahay-driver-vehicle > :first-child { grid-column:1/-1; }
+ .sahay-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@container(max-width:720px) {
+ .sahay-incident-map { grid-template-columns:minmax(0,1fr); }
+ .sahay-service-grid { grid-template-columns:minmax(0,1fr); }
+ .sahay-stepper { padding:12px; gap:8px; }
+ .sahay-stepper strong { font-size:11px; }
+}
+@media(max-width:800px) {
+ .sahay-sidebar { visibility:hidden; }
+ .sahay-sidebar.is-open { visibility:visible; }
+ .sahay-header { padding:0 12px; gap:8px; }
+ .sahay-header-actions { gap:8px; }
+ .sahay-brand > .sahay-brand-lockup { width:145px; }
+ .sahay-role-card,.sahay-driver-case,.sahay-driver-vehicle { padding:18px; }
+}
+@media(max-width:560px) {
+ .sahay-case-column,.sahay-arrival-grid,.sahay-care-values { grid-template-columns:minmax(0,1fr); }
+ .sahay-case-column > :last-child { grid-column:auto; }
+ .sahay-driver-vehicle { display:block; }
+ .sahay-driver-vehicle > * + * { margin-top:18px; }
+ .sahay-page-heading p { font-size:13px; }
+ .sahay-service strong { font-size:18px; }
+ .sahay-service small { font-size:12px; }
+ .sahay-stepper { margin-top:18px; }
+ .sahay-summary-grid { grid-template-columns:minmax(0,1fr); }
+ .sahay-summary span { font-size:12px; }
+ .sahay-map-column > .sahay-map { min-height:400px; }
+ .sahay-role-workspace h1 { font-size:25px!important; }
+ .sahay-hospital-cases > section:first-child { padding:16px; }
+ .sahay-referral-card { padding:16px 0; }
+ .sahay-legacy > .sahay-login-card { padding:24px; border-radius:16px; }
+ .sahay-demo-accounts button { align-items:flex-start; flex-direction:column; gap:4px; }
+ .sahay-demo-accounts button > div:last-child { text-align:left; }
+ .sahay-notification-popover { top:64px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .sahay-app * { scroll-behavior:auto!important; }
+}
+
+.sahay-hidden { display:none; }
+.sahay-role-workspace h2 { font-size:19px; font-weight:700; line-height:1.4; margin:0 0 12px; }
+.sahay-role-workspace h3 { font-size:15px; font-weight:650; line-height:1.5; }
+@media(max-width:560px) { .sahay-role-workspace h2 {font-size:18px;} }
+
+.sahay-reading-scroll { max-height:360px; overflow:auto; overscroll-behavior:contain; border:1px solid #e2e7f0; border-radius:10px; }
+.sahay-reading-table th { position:sticky; top:0; z-index:1; }
+.sahay-trip-actions { margin-top:20px; padding:16px; border:1px solid #d4deec; border-radius:12px; background:#f3f7fe; }
+.sahay-trip-actions button { min-height:44px; }
+.sahay-hospital-cases > .sahay-role-card { margin-top:22px; }
+@media(max-width:560px) { .sahay-trip-actions .flex > button {width:100%;} }
+
+.sahay-map-route-button { bottom:84px; }
+@media(max-width:560px) {
+ .sahay-app input:not([type=checkbox]):not([type=radio]),.sahay-app textarea,.sahay-app select {font-size:16px;}
+}

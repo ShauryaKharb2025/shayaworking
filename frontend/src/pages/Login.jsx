@@ -5,13 +5,8 @@ import { roleHome } from "../utils/roles";
 
 const DEMO_ACCOUNTS = [
   { role: "patient", label: "Patient", email: "patient@sahay.org", name: "Aarav Sharma" },
-  { role: "dispatcher", label: "Dispatcher", email: "dispatcher@sahay.org", name: "Priya Nair" },
   { role: "hospital", label: "Hospital ER", email: "hospital@sahay.org", name: "Dr. Alok Verma" },
-  { role: "driver", label: "Driver", email: "driver.ramesh@sahay.local", name: "Ramesh Kumar" },
-  { role: "operator", label: "Operator", email: "operator@sewa-ambulance.org", name: "Sewa Trust" },
-  { role: "clinician", label: "Clinician", email: "clinician@sahay.org" },
-  { role: "caregiver", label: "Caregiver", email: "caregiver@sahay.org" },
-  { role: "admin", label: "Admin", email: "admin@sahay.org" },
+  { role: "driver", label: "Ambulance / Driver", email: "driver.ramesh@sahay.local", name: "Ramesh Kumar" },
 ];
 
 export default function Login() {
@@ -45,7 +40,7 @@ export default function Login() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-6 py-16">
+    <div className="sahay-login-card">
       <p className="text-sm font-medium text-signal-dark">Sign in</p>
 
       <h1 className="mt-2 font-display text-3xl font-semibold text-navy">
@@ -53,11 +48,11 @@ export default function Login() {
       </h1>
 
       <p className="mt-3 text-sm leading-relaxed text-ink/60">
-        Sign in to dispatch, monitor, or manage emergency ambulance and hospital referrals.
+        Sign in as a patient, ambulance driver or hospital receiving team.
       </p>
 
       {error && (
-        <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+        <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-200">
           {error}
         </div>
       )}
@@ -76,6 +71,7 @@ export default function Login() {
           <input
             id="email"
             type="email"
+            autoComplete="username"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -100,12 +96,12 @@ export default function Login() {
         </button>
       </form>
 
-      <div className="mt-8 border-t border-line/60 pt-6">
+      {import.meta.env.DEV && <div className="mt-8 border-t border-line/60 pt-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-ink/50">
           Demo accounts — choose a role to sign in
         </p>
         <p className="mt-2 text-sm text-ink/70">Password for every demo account <code>SahayDemo123!</code></p>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div className="sahay-demo-accounts">
           {DEMO_ACCOUNTS.map((acc) => (
             <button
               key={acc.role}
@@ -119,7 +115,7 @@ export default function Login() {
             </button>
           ))}
         </div>
-      </div>
+      </div>}
 
       <p className="mt-10 text-xs text-ink/40">
         In an emergency right now, dial 112 directly — don't wait on sign-in.

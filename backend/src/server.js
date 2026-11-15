@@ -61,6 +61,25 @@ app.get("/api/location/detect", async (req, res) => {
   res.json({ lat: 28.6139, lng: 77.2090, address: "Connaught Place, New Delhi" });
 });
 
+app.get("/api/location/search", async (req, res) => {
+  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (query.length < 3 || query.length > 300) return res.status(400).json({ message: "Enter a pickup address" });
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.search = new URLSearchParams({ q: query, format: "json", limit: "5" });
+    const response = await fetch(url, {
+      headers: { "User-Agent": "SahayLocalDevelopment/1.0" },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!response.ok) throw new Error("Geocoding unavailable");
+    const places = await response.json();
+    if (!places.length) return res.status(404).json({ message: "Address not found" });
+    return res.json({ results: places.map(place => ({ lat: Number(place.lat), lng: Number(place.lon), address: place.display_name })) });
+  } catch {
+    return res.status(503).json({ message: "Address lookup unavailable. Select the pickup on the map." });
+  }
+});
+
 app.get("/api/location/reverse", async (req, res) => {
   const { lat, lng } = req.query;
   if (!lat || !lng) return res.status(400).json({ message: "lat and lng required" });

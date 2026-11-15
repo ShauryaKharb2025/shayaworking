@@ -94,6 +94,8 @@ export default function OperatorDashboard() {
 
   useEffect(() => {
     loadAmbulances();
+    const timer = setInterval(loadAmbulances, 10000);
+    return () => clearInterval(timer);
   }, [user?.operator]);
 
   const updateForm = (field, value) => {

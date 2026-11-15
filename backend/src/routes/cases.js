@@ -50,6 +50,20 @@ function notify(req, trip, hospitalId) {
   kickOrchestration(io);
 }
 
+router.get("/clinician/queue", requireRole("clinician"), route(async (req, res) => {
+  if (!req.account.hospitalId) return res.json({ cases: [] });
+  const slots = await db.doctorSlot.findMany({
+    where: { doctorId: req.user.sub, tripId: { not: null },
+      trip: { status: { not: "cancelled" } } },
+    include: { trip: { include: { patient: { select: { name: true } } } } },
+    orderBy: { startsAt: "asc" },
+  });
+  res.json({ cases: slots.map(slot => ({
+    id: slot.trip.id, patient: slot.trip.patient.name, status: slot.trip.status,
+    symptoms: slot.trip.symptoms, specialty: slot.specialty, startsAt: slot.startsAt,
+  })) });
+}));
+
 router.get("/:id/destinations", dispatch, route(async (req, res) => {
   const trip = await findTrip(db, req.params.id);
   const [hospitals, referrals] = await Promise.all([
@@ -76,11 +90,18 @@ router.post("/:id/referrals", dispatch, route(async (req, res) => {
   res.status(201).json({ ok: true });
 }));
 
+function demoHospital(req) {
+  return process.env.NODE_ENV !== "production" && req.account.email === "hospital@sahay.org";
+}
+
 router.get("/hospital/referrals", receiving, route(async (req, res) => {
   if (!req.account.hospitalId) fail(403, "Hospital account required");
   const referrals = await db.hospitalReferral.findMany({
-    where: { hospitalId: req.account.hospitalId, status: { in: ["proposed", "accepted", "confirmed"] }, trip: { status: { notIn: terminal } } },
-    include: { trip: { select: { id: true, status: true, etaMinutes: true } } },
+    where: {
+      ...(demoHospital(req) ? { OR: [{ hospitalId: req.account.hospitalId }, { trip: { patient: { email: "patient@sahay.org" } } }] } : { hospitalId: req.account.hospitalId }),
+      status: { in: ["proposed", "accepted", "confirmed", "cancelled"] }, trip: { OR: [{ status: { notIn: terminal } }, { status:"cancelled",updatedAt:{gte:new Date(Date.now()-86400000)} }] },
+    },
+    include: { hospital: { select: { name: true } }, trip: { select: { id: true, status: true, etaMinutes: true, symptoms: true, triage: true, address: true, requestedAmbulanceTier: true, careDetails: true, updatedAt: true, events: true, ambulance: { select: { vehicleNumber: true } } } } },
     orderBy: { createdAt: "desc" },
   });
   res.json({ referrals });
@@ -96,7 +117,8 @@ router.patch("/:id/referrals/:referralId", requireRole("hospital", "dispatcher",
     const hospitalActor = req.user.role === "hospital";
     let update = {};
     let nextStatus = action;
-    if (hospitalActor && req.account.hospitalId === referral.hospitalId &&
+    const demoPatient = demoHospital(req) && (await tx.user.findUnique({where:{id:trip.patientId},select:{email:true}}))?.email === "patient@sahay.org";
+    if (hospitalActor && (req.account.hospitalId === referral.hospitalId || demoPatient) &&
         referral.status === "proposed" && ["accepted", "rejected"].includes(action)) {
       if (action === "accepted") {
         const candidate = await tx.hospital.findUnique({ where: { id: referral.hospitalId } });
@@ -233,7 +255,9 @@ router.get("/:id/journey", route(async (req, res) => {
   const trip = await findTrip(db, req.params.id);
   const role = req.user.role;
   const own = role === "patient" && trip.patientId === req.user.sub;
-  const staff = ["hospital", "clinician"].includes(role) && req.account.hospitalId && req.account.hospitalId === trip.hospitalId;
+  const staff = ["hospital", "clinician"].includes(role) && (
+    (req.account.hospitalId && req.account.hospitalId === trip.hospitalId) ||
+    (trip.hospitalId && demoHospital(req) && (await db.user.findUnique({where:{id:trip.patientId},select:{email:true}}))?.email === "patient@sahay.org"));
   const driver = role === "driver" && trip.ambulance?.driverId === req.user.sub && !terminal.includes(trip.status);
   const dispatch = ["dispatcher", "admin"].includes(role);
   const grant = !own && !staff && !driver && !dispatch && await db.caregiverAccess.findFirst({
@@ -249,30 +273,172 @@ router.get("/:id/journey", route(async (req, res) => {
 
 async function clinicianCase(req) {
   const trip = await findTrip(db, req.params.id);
-  const hospital = req.account.hospitalId && req.account.hospitalId === trip.hospitalId;
+  const hospital = !!trip.hospitalId && ((req.account.hospitalId && req.account.hospitalId === trip.hospitalId) ||
+    (demoHospital(req) && (await db.user.findUnique({where:{id:trip.patientId},select:{email:true}}))?.email === "patient@sahay.org"));
   const driver = req.user.role === "driver" && trip.ambulance?.driverId === req.user.sub &&
     trip.ambulance.crew.some(member => member.userId === req.user.sub && member.certified === true);
   if (!hospital && !(driver && trip.status !== "offered")) fail(403, "Case-specific clinical authorization required");
   return trip;
 }
 
-router.get("/:id/observations", requireRole("clinician", "driver"), route(async (req, res) => {
+router.get("/:id/observations", requireRole("hospital", "clinician", "driver"), route(async (req, res) => {
   const trip = await clinicianCase(req);
   const observations = await db.clinicalObservation.findMany({ where: { tripId: trip.id }, orderBy: { createdAt: "desc" } });
   res.json({ observations });
 }));
 
-router.post("/:id/observations", requireRole("clinician", "driver"), route(async (req, res) => {
+router.post("/:id/observations", requireRole("hospital", "clinician", "driver"), route(async (req, res) => {
   const trip = await clinicianCase(req);
-  active(trip);
+  if (["cancelled", "waitlisted"].includes(trip.status)) fail(409, "Case is not available for clinical recording");
   const { type, note, familyVisible } = req.body;
-  if (!["assessment", "vitals", "intervention_observed", "equipment_used", "handoff_observation"].includes(type) || typeof note !== "string" ||
+  if (["operation_plan","procedure_update"].includes(type) && !["hospital","clinician"].includes(req.user.role)) fail(403,"Hospital clinical staff must record operation updates");
+  if (!["assessment", "vitals", "intervention_observed", "equipment_used", "handoff_observation","operation_plan","procedure_update"].includes(type) || typeof note !== "string" ||
       !note.trim() || note.length > 2000) fail(400, "Observation type and note are required");
+  if (type === "intervention_observed" && !["picked_up","en_route_hospital","arrived_hospital","handed_off"].includes(trip.status)) {
+    fail(409, "Confirm patient pickup before recording onboard treatment");
+  }
   const observation = await db.clinicalObservation.create({
     data: { tripId: trip.id, actorId: req.user.sub, type, note: note.trim(), familyVisible: familyVisible === true },
   });
   notify(req, trip);
   res.status(201).json({ observation });
+}));
+
+router.get("/:id/specialist", route(async (req, res) => {
+  const trip = await findTrip(db, req.params.id);
+  const permitted = ["dispatcher", "admin"].includes(req.user.role) ||
+    trip.patientId === req.user.sub || trip.ambulance?.driverId === req.user.sub ||
+    (req.account.hospitalId && req.account.hospitalId === trip.hospitalId) ||
+    (demoHospital(req) && (await db.user.findUnique({where:{id:trip.patientId},select:{email:true}}))?.email === "patient@sahay.org");
+  if (!permitted) fail(403, "Case access required");
+  const slot = await db.doctorSlot.findUnique({ where: { tripId: trip.id },
+    include: { doctor: { select: { name: true, medicalProfile: true } } } });
+  if (slot?.doctor) {
+    const profile = slot.doctor.medicalProfile || {};
+    slot.doctor.medicalProfile = {qualification:profile.qualification, specialties:profile.specialties, demo:profile.demo === true};
+  }
+  res.json({ slot, message: slot ? "Specialist slot reserved" :
+    !trip.hospitalId ? "Awaiting confirmed hospital" : "Searching available specialist slots at the receiving hospital" });
+}));
+
+router.post("/hospital/specialists", receiving, route(async (req,res)=>{
+  const { hospitalId, name, email, qualification, specialty, startsAt, endsAt } = req.body;
+  const target = hospitalId || req.account.hospitalId;
+  if (target !== req.account.hospitalId && !demoHospital(req)) fail(403,"Hospital membership required");
+  if (![name,email,qualification,specialty].every(value=>typeof value==="string" && value.trim() && value.length<=200)) fail(400,"Doctor name, email, qualification and specialty are required");
+  const start=new Date(startsAt),end=new Date(endsAt);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start<=new Date() || end<=start) fail(400,"Choose a valid future availability period");
+  const cleanEmail=email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) fail(400,"Valid staff email required");
+  const slot=await db.$transaction(async tx=>{
+    let doctor=await tx.user.findUnique({where:{email:cleanEmail}});
+    if(doctor && (doctor.role!=="clinician" || doctor.hospitalId!==target))fail(403,"Staff account belongs to another role or hospital");
+    if(!doctor)doctor=await tx.user.create({data:{name:name.trim(),email:cleanEmail,role:"clinician",hospitalId:target,
+      medicalProfile:{qualification:qualification.trim(),specialties:[specialty.trim()]}}});
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${doctor.id} FOR UPDATE`;
+    if(await tx.doctorSlot.findFirst({where:{doctorId:doctor.id,startsAt:{lt:end},endsAt:{gt:start}}}))fail(409,"Doctor availability overlaps an existing slot");
+    await tx.user.update({where:{id:doctor.id},data:{name:name.trim(),medicalProfile:{...doctor.medicalProfile,qualification:qualification.trim(),specialties:[...new Set([...(doctor.medicalProfile.specialties||[]),specialty.trim()])]}}});
+    return tx.doctorSlot.create({data:{doctorId:doctor.id,specialty:specialty.trim(),startsAt:start,endsAt:end}});
+  });
+  kickOrchestration(req.app.get("io"));
+  res.status(201).json({slot});
+}));
+
+router.post("/specialist/slots", requireRole("clinician"), route(async (req, res) => {
+  const { specialty, startsAt, endsAt } = req.body;
+  const start = new Date(startsAt), end = new Date(endsAt);
+  if (!req.account.hospitalId || typeof specialty !== "string" || !specialty.trim() ||
+      specialty.length > 150 || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) ||
+      start <= new Date() || end <= start) fail(400, "Hospital, specialty and a future time range are required");
+  const slot = await db.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${req.user.sub} FOR UPDATE`;
+    const overlap = await tx.doctorSlot.findFirst({ where: { doctorId: req.user.sub, startsAt: { lt: end }, endsAt: { gt: start } } });
+    if (overlap) fail(409, "This slot overlaps existing availability");
+    return tx.doctorSlot.create({ data: { doctorId: req.user.sub, specialty: specialty.trim(), startsAt: start, endsAt: end } });
+  });
+  kickOrchestration(req.app.get("io"));
+  res.status(201).json({ slot });
+}));
+
+
+const detailSections = {
+  health: { role: "patient", fields: ["allergies","medicines","conditions","emergencyContact","emergencyPhone"] },
+  preparation: { role: "hospital", fields: ["entrance","dropoff","receivingDesk","contactNumber","receivingNurse","nurseAvailability","responsibleDoctor","treatmentRoom","doctorContact","doctorNotes","staffingNeeds","urgency","urgencyReason","expectedArrival"], checks: ["teamAssigned","bedReserved","equipmentReady","arrivalAcknowledged"] },
+  handover: { role: "driver", fields: ["pulse","bloodPressure","oxygenSaturation","temperature","observations","treatmentGiven"] },
+};
+
+async function careAccess(tx, req) {
+  const trip = await findTrip(tx, req.params.id);
+  const referral = await tx.hospitalReferral.findFirst({
+    where: { tripId: trip.id, status: { in: ["proposed","accepted","confirmed","cancelled"] } },
+    orderBy: { createdAt: "desc" }, include: { hospital: { select: { id:true,name:true,address:true,erContact:true } } },
+  });
+  const destination = trip.hospital || referral?.hospital;
+  const own = req.user.role === "patient" && trip.patientId === req.user.sub;
+  const driver = req.user.role === "driver" && trip.ambulance?.driverId === req.user.sub && trip.status !== "offered";
+  const hospital = req.user.role === "hospital" && destination && (
+    req.account.hospitalId === destination.id ||
+    (demoHospital(req) && (await tx.user.findUnique({where:{id:trip.patientId},select:{email:true}}))?.email === "patient@sahay.org"));
+  if (!own && !driver && !hospital) fail(403,"Case-specific access required");
+  return {trip,referral,destination};
+}
+
+function scopedDetails(trip, destination) {
+  const details = { ...trip.careDetails };
+  if (details.preparation?.hospitalId !== destination?.id) delete details.preparation;
+  return details;
+}
+
+router.get("/:id/care-details", route(async(req,res)=>{
+  const {trip,referral,destination} = await careAccess(db,req);
+  const details = scopedDetails(trip,destination);
+  const acceptance = trip.events.findLast(row=>row.type==="hospital:confirmed" || row.type==="hospital:accepted");
+  const changes = trip.events.filter(row=>new Date(row.at)>=new Date(acceptance?.at || referral?.createdAt || trip.createdAt))
+    .filter(row=>/^(status:|journey:eta_updated|journey:care_details|hospital:)/.test(row.type)).slice(-15);
+  const observations = await db.clinicalObservation.findMany({where:{tripId:trip.id},select:{id:true,type:true,note:true,createdAt:true},orderBy:{createdAt:"desc"},take:20});
+  const slot = await db.doctorSlot.findUnique({where:{tripId:trip.id},include:{doctor:{select:{name:true,phone:true,medicalProfile:true}}}});
+  const assignedDoctor=slot?{name:slot.doctor.name,phone:slot.doctor.phone,qualification:slot.doctor.medicalProfile?.qualification,
+    specialty:slot.specialty,startsAt:slot.startsAt,demo:slot.doctor.medicalProfile?.demo===true}:null;
+  const healthReadings=await db.healthReading.findMany({where:{tripId:trip.id},orderBy:{measuredAt:"desc"},take:50,select:{id:true,source:true,values:true,measuredAt:true}});
+  const expected = details.preparation?.expectedArrival;
+  const delayed = trip.status==="en_route_hospital" && !!expected && new Date(expected)<new Date();
+  res.json({ details, assignedDoctor, healthReadings, status:trip.status, hospital:destination && {id:destination.id,name:destination.name,address:destination.address,contact:destination.erContact},
+    acknowledgement:referral?.status || (trip.hospitalId ? "confirmed" : "pending"), changes, observations, delayed,
+    etaMinutes:trip.etaMinutes, etaDestination:trip.status==="en_route_hospital" ? "hospital" : "pickup",
+    etaUpdatedAt:trip.etaMinutes!=null ? trip.ambulance?.lastPingAt || trip.dispatchedAt : null, gpsLastSeen:trip.ambulance?.lastPingAt, lastUpdated:trip.updatedAt });
+}));
+
+router.patch("/:id/care-details", route(async(req,res)=>{
+  const {section,revision,values} = req.body;
+  const spec = detailSections[section];
+  if (!spec || req.user.role!==spec.role) fail(403,"This section belongs to another role");
+  if (!Number.isSafeInteger(revision) || revision<0 || !values || typeof values!=="object" || Array.isArray(values)) fail(400,"Section revision and values required");
+  const fields = spec.fields || [], checks=spec.checks || [];
+  if(Object.keys(values).some(key=>![...fields,...checks].includes(key)))fail(400,"Unknown care detail");
+  for(const field of fields)if(values[field]!==undefined && (typeof values[field]!=="string" || values[field].length>1500))fail(400,"Care detail text is invalid or too long");
+  for(const field of checks)if(values[field]!==undefined && typeof values[field]!=="boolean")fail(400,"Checklist values must be true or false");
+  if(section==="preparation" && values.urgency && !["critical","urgent","standard","unassessed"].includes(values.urgency))fail(400,"Invalid recorded urgency");
+  if(values.expectedArrival && !Number.isFinite(new Date(values.expectedArrival).getTime()))fail(400,"Invalid expected arrival");
+  await db.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${req.params.id} FOR UPDATE`;
+    const {trip,destination}=await careAccess(tx,req);
+    active(trip);
+    if(section==="preparation" && req.body.hospitalId!==destination?.id)fail(409,"Receiving hospital changed. Reload before saving preparation.");
+    const details=scopedDetails(trip,destination);
+    if((details[section]?.revision || 0)!==revision)fail(409,"This section changed. Reload it before saving.");
+    if(section==="preparation" && values.arrivalAcknowledged && !["arrived_hospital"].includes(trip.status))fail(409,"Hospital arrival must be recorded before acknowledging arrival");
+    const saved={...details[section],...values,revision:revision+1,updatedAt:new Date().toISOString(),updatedBy:req.user.sub,
+      ...(section==="preparation"?{hospitalId:destination.id}:{})};
+    if(section==="handover"){
+      saved.source="crew";
+      const reading=Object.fromEntries(detailSections.handover.fields.map(field=>[field,saved[field]||""]));
+      await tx.healthReading.create({data:{tripId:trip.id,actorId:req.user.sub,source:"crew",values:reading}});
+    }
+    await record(tx,trip,req,"journey:care_details",{section},{careDetails:{...details,[section]:saved}});
+  });
+  const {trip}=await careAccess(db,req);
+  notify(req,trip);
+  res.json({ok:true});
 }));
 
 module.exports = router;

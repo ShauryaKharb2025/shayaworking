@@ -20,32 +20,22 @@ describe("location detection & reverse geocoding", () => {
     expect(addr).toBe("Connaught Place, Delhi, India");
   });
 
-  it("detectLocation falls back to IP geolocation when browser geolocation fails", async () => {
-    // navigator.geolocation throws/fails
-    global.navigator.geolocation = {
-      getCurrentPosition: vi.fn((_success, error) => error(new Error("Denied"))),
-    };
-
-    global.fetch = vi.fn().mockImplementation(async (url) => {
-      if (url.includes("ipwho.is")) {
-        return {
-          ok: true,
-          json: async () => ({
-            success: true,
-            latitude: 28.552,
-            longitude: 77.554,
-            city: "Dadri",
-            region: "Uttar Pradesh",
-            country: "India",
-          }),
-        };
-      }
-      return { ok: false };
-    });
-
+  it("rejects denied GPS without substituting an IP or default location", async () => {
+    global.navigator.geolocation = { getCurrentPosition: vi.fn((success,error)=>error(new Error("Denied"))) };
+    global.fetch = vi.fn();
+    await expect(detectLocation()).rejects.toThrow("fresh GPS");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("requests fresh precise GPS and returns its accuracy", async () => {
+    const getCurrentPosition = vi.fn(success=>success({coords:{latitude:28.63,longitude:77.21,accuracy:12}}));
+    global.navigator.geolocation = {getCurrentPosition};
+    global.fetch = vi.fn().mockResolvedValue({ok:true,json:async()=>({city:"Delhi"})});
     const result = await detectLocation();
-    expect(result.lat).toBe(28.552);
-    expect(result.lng).toBe(77.554);
-    expect(result.address).toBe("Dadri, Uttar Pradesh, India");
+    expect(result).toMatchObject({lat:28.63,lng:77.21,accuracy:12});
+    expect(getCurrentPosition).toHaveBeenCalledWith(expect.any(Function),expect.any(Function),{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+  });
+  it("rejects broad GPS estimates", async () => {
+    global.navigator.geolocation = {getCurrentPosition:vi.fn(success=>success({coords:{latitude:28,longitude:77,accuracy:5000}}))};
+    await expect(detectLocation()).rejects.toThrow("accuracy is too low");
   });
 });

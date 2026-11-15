@@ -3,7 +3,7 @@ function distanceKm([lng, lat], [targetLng, targetLat]) {
   const a = Math.sin((targetLat - lat) * radians / 2) ** 2 +
     Math.cos(lat * radians) * Math.cos(targetLat * radians) *
     Math.sin((targetLng - lng) * radians / 2) ** 2;
-  return Math.round(12742 * Math.asin(Math.sqrt(Math.min(1, a))) * 10) / 10;
+  return 12742 * Math.asin(Math.sqrt(Math.min(1, a)));
 }
 
 function ambulanceCandidates(trip, fleet) {
@@ -11,11 +11,15 @@ function ambulanceCandidates(trip, fleet) {
   const equipment = Array.isArray(trip.triage?.suggestedEquipment) ? trip.triage.suggestedEquipment : [];
   return fleet.map(vehicle => {
     const reasons = [];
+    const coordinates = vehicle.location?.coordinates;
+    const located = Array.isArray(coordinates) && coordinates.length === 2 &&
+      coordinates.every(Number.isFinite) && Math.abs(coordinates[0]) <= 180 && Math.abs(coordinates[1]) <= 90;
+    if (!located) reasons.push("Vehicle location unavailable");
     if (vehicle.status !== "idle") reasons.push("Vehicle unavailable");
     if (!vehicle.complianceVerified || !vehicle.operator?.verified) reasons.push("Compliance unverified");
     if (!vehicle.crew?.some(member => member.certified === true)) reasons.push("Certified crew not recorded");
     if (tier === "ALS" && vehicle.tier !== "ALS") reasons.push("ALS required");
-    const inventory = new Set(vehicle.equipment.map(item => item.toLowerCase()));
+    const inventory = new Set((vehicle.equipment || []).map(item => item.toLowerCase()));
     if (equipment.some(item => !inventory.has(String(item).toLowerCase()))) reasons.push("Required equipment missing");
     return {
       id: vehicle.id || vehicle._id,
@@ -23,7 +27,7 @@ function ambulanceCandidates(trip, fleet) {
       tier: vehicle.tier,
       eligible: reasons.length === 0,
       reasons,
-      distanceKm: distanceKm(trip.pickupLocation.coordinates, vehicle.location.coordinates),
+      distanceKm: located ? distanceKm(trip.pickupLocation.coordinates, coordinates) : Infinity,
     };
   }).sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.distanceKm - b.distanceKm || a.id.localeCompare(b.id));
 }
@@ -37,7 +41,7 @@ function hospitalCandidates(trip, hospitals) {
     bedsAvailable: hospital.bedsAvailable,
     eligible: hospital.receivingReady && hospital.bedsAvailable > 0 &&
       required.every(item => hospital.specialties.some(specialty => specialty.toLowerCase() === item.toLowerCase())),
-    distanceKm: distanceKm(trip.ambulance?.location?.coordinates || trip.pickupLocation.coordinates, hospital.location.coordinates),
+    distanceKm: distanceKm(trip.pickupLocation.coordinates, hospital.location.coordinates),
   })).sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.distanceKm - b.distanceKm || a.id.localeCompare(b.id));
 }
 

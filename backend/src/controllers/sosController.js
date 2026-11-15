@@ -199,13 +199,16 @@ async function getTrip(req, res, next) {
     if (!allowed) return res.status(403).json({message:"You do not have access to this case."});
     const referral = await require("../data/prisma").hospitalReferral.findFirst({
       where: { tripId: trip._id, status: { in: ["proposed", "accepted"] } },
-      select: { status: true, hospital: { select: { name: true } } },
+      select: { status: true, hospital: { select: { id: true, name: true, location: true, specialties: true } } },
     });
-    const publicEvents = trip.events.map(({ _id, type, at }) => ({ _id, type, at }));
-    const result = { ...trip.toJSON(), events: publicEvents, proposedHospital: referral?.hospital || null };
-    if (trip.status === "offered" && req.user.role === "patient") {
-      return res.json({ trip: { ...result, ambulance: null, events: publicEvents.filter(event => !["ambulance:offered", "ambulance:auto_offered"].includes(event.type)) } });
-    }
+    if (trip.ambulance) await trip.populate({
+      path: "ambulance", populate: { path: "driver", select: "name phone" },
+    });
+    const publicEvents = trip.events.map(({ _id, type, at, payload }) => ({
+      _id, type, at, ...(["journey:demo_drive_started","journey:demo_hospital_drive_started"].includes(type) ? { payload } : {}),
+    }));
+    const { careDetails, ...publicTrip } = trip.toJSON();
+    const result = { ...publicTrip, events: publicEvents, proposedHospital: referral?.hospital || null };
     return res.json({ trip: result });
   } catch (error) {
     next(error);

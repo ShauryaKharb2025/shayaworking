@@ -22,6 +22,7 @@ model User {
   caregiverFor String[] @default([])
   medicalProfile Json @default("{}")
   isActive Boolean @default(true)
+  doctorSlots DoctorSlot[]
   ambulances Ambulance[]
   trips Trip[] @relation("PatientTrips")
   triggeredTrips Trip[] @relation("TriggeredTrips")
@@ -106,6 +107,7 @@ model Trip {
   pickupLocation Json
   address String?
   triage Json @default("{}")
+  careDetails Json @default("{}")
   status String @default("requested")
   coverageState String @default("live")
   ambulanceId String?
@@ -123,6 +125,8 @@ model Trip {
   referrals HospitalReferral[]
   caregiverAccess CaregiverAccess[]
   observations ClinicalObservation[]
+  healthReadings HealthReading[]
+  doctorSlot DoctorSlot?
   journeyProjection JourneyProjection?
 
   createdAt DateTime @default(now())
@@ -189,4 +193,29 @@ model JourneyProjection {
   coordination String
   summary Json
   updatedAt DateTime @updatedAt
+}
+
+
+model DoctorSlot {
+  id String @id @default(uuid())
+  doctorId String
+  doctor User @relation(fields: [doctorId], references: [id])
+  specialty String
+  startsAt DateTime
+  endsAt DateTime
+  tripId String? @unique
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  @@unique([doctorId, startsAt])
+  @@index([specialty, startsAt])
+}
+
+model HealthReading {
+  id String @id @default(uuid())
+  tripId String
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  actorId String?
+  source String
+  values Json
+  measuredAt DateTime @default(now())
+  @@index([tripId, measuredAt])
 }

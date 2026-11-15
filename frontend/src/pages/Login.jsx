@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { roleHome } from "../utils/roles";
 
 const DEMO_ACCOUNTS = [
+  {role:"admin",label:"Command centre",email:"admin@sahay.org"},
   { role: "patient", label: "Patient", email: "patient@sahay.org", name: "Aarav Sharma" },
   { role: "hospital", label: "Hospital ER", email: "hospital@sahay.org", name: "Dr. Alok Verma" },
   { role: "driver", label: "Ambulance / Driver", email: "driver.ramesh@sahay.local", name: "Ramesh Kumar" },
@@ -48,7 +49,7 @@ export default function Login() {
       </h1>
 
       <p className="mt-3 text-sm leading-relaxed text-ink/60">
-        Sign in as a patient, ambulance driver or hospital receiving team.
+        Sign in as a patient, ambulance driver, hospital receiving team or administrator.
       </p>
 
       {error && (

@@ -2,7 +2,7 @@ const router = require("express").Router();
 const { createHash, randomBytes, randomUUID } = require("node:crypto");
 const db = require("../data/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
-const { hospitalCandidates, distanceKm } = require("../services/matching");
+const { ambulanceCandidates, hospitalCandidates, distanceKm } = require("../services/matching");
 const { eventsForJourney, fingerprint } = require("../services/journey");
 const { kickOrchestration } = require("../services/autoDispatchService");
 
@@ -50,20 +50,6 @@ function notify(req, trip, hospitalId) {
   kickOrchestration(io);
 }
 
-router.get("/clinician/queue", requireRole("clinician"), route(async (req, res) => {
-  if (!req.account.hospitalId) return res.json({ cases: [] });
-  const slots = await db.doctorSlot.findMany({
-    where: { doctorId: req.user.sub, tripId: { not: null },
-      trip: { status: { not: "cancelled" } } },
-    include: { trip: { include: { patient: { select: { name: true } } } } },
-    orderBy: { startsAt: "asc" },
-  });
-  res.json({ cases: slots.map(slot => ({
-    id: slot.trip.id, patient: slot.trip.patient.name, status: slot.trip.status,
-    symptoms: slot.trip.symptoms, specialty: slot.specialty, startsAt: slot.startsAt,
-  })) });
-}));
-
 router.get("/:id/destinations", dispatch, route(async (req, res) => {
   const trip = await findTrip(db, req.params.id);
   const [hospitals, referrals] = await Promise.all([
@@ -101,7 +87,7 @@ router.get("/hospital/referrals", receiving, route(async (req, res) => {
       ...(demoHospital(req) ? { OR: [{ hospitalId: req.account.hospitalId }, { trip: { patient: { email: "patient@sahay.org" } } }] } : { hospitalId: req.account.hospitalId }),
       status: { in: ["proposed", "accepted", "confirmed", "cancelled"] }, trip: { OR: [{ status: { notIn: terminal } }, { status:"cancelled",updatedAt:{gte:new Date(Date.now()-86400000)} }] },
     },
-    include: { hospital: { select: { name: true } }, trip: { select: { id: true, status: true, etaMinutes: true, symptoms: true, triage: true, address: true, requestedAmbulanceTier: true, careDetails: true, updatedAt: true, events: true, ambulance: { select: { vehicleNumber: true } } } } },
+    include: { hospital: { select: { name: true } }, trip: { select: { id: true, status: true, etaMinutes: true, etaSource: true, symptoms: true, triage: true, address: true, requestedAmbulanceTier: true, careDetails: true, updatedAt: true, events: true, ambulance: { select: { vehicleNumber: true } } } } },
     orderBy: { createdAt: "desc" },
   });
   res.json({ referrals });
@@ -147,6 +133,7 @@ router.patch("/:id/referrals/:referralId", requireRole("hospital", "dispatcher",
       update = { hospitalId: referral.hospitalId };
       if (trip.status === "en_route_hospital" && trip.ambulance) {
         update.etaMinutes = Math.ceil(distanceKm(trip.ambulance.location.coordinates, hospital.location.coordinates) * 2);
+        update.etaSource = "straight_line";
       }
     } else {
       fail(403, "Referral action is not authorized");
@@ -183,57 +170,11 @@ router.post("/:id/invitations", patient, route(async (req, res) => {
   res.status(201).json({ token, expiresAt });
 }));
 
-router.post("/caregiver/redeem", requireRole("patient", "caregiver"), route(async (req, res) => {
-  const token = req.body.token;
-  if (typeof token !== "string" || token.length !== 43) fail(400, "Invalid invitation");
-  const invitation = await db.caregiverAccess.findUnique({ where: { tokenHash: hash(token) } });
-  if (!invitation || invitation.email !== req.account.email.toLowerCase()) fail(403, "Invitation unavailable");
-  const result = await db.caregiverAccess.updateMany({
-    where: { id: invitation.id, revokedAt: null, userId: null, expiresAt: { gt: new Date() } },
-    data: { userId: req.user.sub, expiresAt: new Date(Date.now() + 24 * 60 * 60_000) },
-  });
-  if (!result.count) fail(403, "Invitation expired, revoked or already used");
-  res.json({ tripId: invitation.tripId });
-}));
-
 router.delete("/:id/invitations/:invitation", patient, route(async (req, res) => {
   const trip = await findTrip(db, req.params.id);
   if (trip.patientId !== req.user.sub) fail(403, "Patient account required");
   await db.caregiverAccess.updateMany({ where: { id: req.params.invitation, tripId: trip.id, revokedAt: null }, data: { revokedAt: new Date() } });
   res.status(204).end();
-}));
-
-async function caregiverJourney(req) {
-  const grant = await db.caregiverAccess.findFirst({
-    where: { tripId: req.params.id, userId: req.user.sub, revokedAt: null, expiresAt: { gt: new Date() } },
-  });
-  if (!grant) fail(403, "Caregiver access is unavailable");
-  const trip = await findTrip(db, req.params.id);
-  const [proposal, observations] = await Promise.all([
-    db.hospitalReferral.findFirst({ where: { tripId: trip.id, status: { in: ["proposed", "accepted"] } }, include: { hospital: true } }),
-    db.clinicalObservation.findMany({ where: { tripId: trip.id, familyVisible: true }, orderBy: { createdAt: "desc" }, take: 40,
-      select: { type: true, note: true, createdAt: true } }),
-  ]);
-  const ambulance = trip.status === "offered" ? null : trip.ambulance;
-  const events = trip.events.filter(event => event.type.startsWith("status:"))
-    .map(({ type, at }) => ({ type, at }));
-  return {
-    status: trip.status, simulatedEtaMinutes: trip.etaMinutes,
-    ambulance: ambulance && { vehicleNumber: ambulance.vehicleNumber, equipment: ambulance.equipment,
-      complianceVerified: ambulance.complianceVerified, location: ambulance.location,
-      crew: ambulance.crew.map(({ role, certified }) => ({ role, certified })) },
-    proposed: proposal?.hospital.name, confirmed: trip.hospital?.name, events, observations,
-  };
-}
-
-router.get("/caregiver/cases", requireRole("patient", "caregiver"), route(async (req, res) => {
-  const grants = await db.caregiverAccess.findMany({ where: { userId: req.user.sub, revokedAt: null, expiresAt: { gt: new Date() } },
-    select: { tripId: true }, distinct: ["tripId"] });
-  res.json({ grants });
-}));
-
-router.get("/:id/caregiver", requireRole("patient", "caregiver"), route(async (req, res) => {
-  res.json(await caregiverJourney(req));
 }));
 
 async function journeyData(trip, observations, caregiver = false) {
@@ -344,22 +285,30 @@ router.post("/hospital/specialists", receiving, route(async (req,res)=>{
   res.status(201).json({slot});
 }));
 
-router.post("/specialist/slots", requireRole("clinician"), route(async (req, res) => {
-  const { specialty, startsAt, endsAt } = req.body;
-  const start = new Date(startsAt), end = new Date(endsAt);
-  if (!req.account.hospitalId || typeof specialty !== "string" || !specialty.trim() ||
-      specialty.length > 150 || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) ||
-      start <= new Date() || end <= start) fail(400, "Hospital, specialty and a future time range are required");
-  const slot = await db.$transaction(async tx => {
-    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${req.user.sub} FOR UPDATE`;
-    const overlap = await tx.doctorSlot.findFirst({ where: { doctorId: req.user.sub, startsAt: { lt: end }, endsAt: { gt: start } } });
-    if (overlap) fail(409, "This slot overlaps existing availability");
-    return tx.doctorSlot.create({ data: { doctorId: req.user.sub, specialty: specialty.trim(), startsAt: start, endsAt: end } });
-  });
-  kickOrchestration(req.app.get("io"));
-  res.status(201).json({ slot });
+router.post("/:id/replacement", requireRole("admin"), route(async(req,res)=>{
+ const {ambulanceId,reason}=req.body;
+ if(typeof ambulanceId!=="string" || typeof reason!=="string" || !reason.trim() || reason.length>500)fail(400,"Replacement ambulance and reason required");
+ const result=await db.$transaction(async tx=>{
+  await tx.$queryRaw`SELECT id FROM "Trip" WHERE id = ${req.params.id} FOR UPDATE`;
+  const trip=await findTrip(tx,req.params.id);
+  if(!["requested","offered","dispatched","en_route","arrived_pickup"].includes(trip.status))fail(409,"Replacement is available before patient pickup only");
+  const vehicle=await tx.ambulance.findUnique({where:{id:ambulanceId},include:{operator:true,driver:true}});
+  if(!vehicle || !vehicle.driver?.isActive || vehicle.driver.role!=="driver" || !ambulanceCandidates(trip,[vehicle])[0].eligible)fail(409,"Replacement ambulance is unavailable or incompatible");
+  const busy=await tx.trip.findFirst({where:{id:{not:trip.id},status:{notIn:["cancelled","handed_off","waitlisted"]},ambulance:{driverId:vehicle.driverId}}});
+  if(busy)fail(409,"Replacement driver already has an active case");
+  const held=await tx.ambulance.updateMany({where:{id:vehicle.id,status:"idle",version:vehicle.version},data:{status:"dispatched",version:{increment:1}}});
+  if(!held.count)fail(409,"Replacement availability changed");
+  if(trip.ambulanceId)await tx.ambulance.update({where:{id:trip.ambulanceId},data:{status:"idle",version:{increment:1}}});
+  await record(tx,trip,req,"ambulance:replacement_approved",{oldVehicleId:trip.ambulanceId,vehicleId:vehicle.id,reason:reason.trim()},
+   {ambulanceId:vehicle.id,status:"offered",dispatchedAt:null,arrivedPickupAt:null,etaMinutes:null,autoDispatchAt:new Date(Date.now()+60000)});
+  return {trip:await findTrip(tx,trip.id),driverId:vehicle.driverId,oldDriverId:trip.ambulance?.driverId};
+ });
+ const io=req.app.get("io");
+ if(result.oldDriverId){io?.in(`driver:${result.oldDriverId}`).socketsLeave(`trip:${result.trip.id}`);io?.to(`driver:${result.oldDriverId}`).emit("case:refresh",{tripId:result.trip.id});}
+ io?.to(`driver:${result.driverId}`).emit("case:refresh",{tripId:result.trip.id});
+ notify(req,result.trip);
+ res.json({ok:true});
 }));
-
 
 const detailSections = {
   health: { role: "patient", fields: ["allergies","medicines","conditions","emergencyContact","emergencyPhone"] },
@@ -404,7 +353,7 @@ router.get("/:id/care-details", route(async(req,res)=>{
   const delayed = trip.status==="en_route_hospital" && !!expected && new Date(expected)<new Date();
   res.json({ details, assignedDoctor, healthReadings, status:trip.status, hospital:destination && {id:destination.id,name:destination.name,address:destination.address,contact:destination.erContact},
     acknowledgement:referral?.status || (trip.hospitalId ? "confirmed" : "pending"), changes, observations, delayed,
-    etaMinutes:trip.etaMinutes, etaDestination:trip.status==="en_route_hospital" ? "hospital" : "pickup",
+    etaMinutes:trip.etaMinutes, etaSource:trip.etaSource, etaDestination:trip.status==="en_route_hospital" ? "hospital" : "pickup",
     etaUpdatedAt:trip.etaMinutes!=null ? trip.ambulance?.lastPingAt || trip.dispatchedAt : null, gpsLastSeen:trip.ambulance?.lastPingAt, lastUpdated:trip.updatedAt });
 }));
 

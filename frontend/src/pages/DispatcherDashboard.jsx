@@ -3,6 +3,7 @@ import api from "../api/axios";
 import { connectSocket } from "../api/socket";
 import { DispatchCaseOperations } from "../components/CaseWorkflow";
 import GoogleMap from "../components/GoogleMap";
+import MaritimeAdvisories from "../components/MaritimeAdvisories";
 
 export default function DispatcherDashboard() {
   const [ambulances, setAmbulances] = useState([]);
@@ -400,12 +401,12 @@ export default function DispatcherDashboard() {
    */
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-10">
+    <div className="sahay-role-workspace">
       {/* Header */}
 
       <div>
         <p className="text-sm font-medium text-signal-dark">
-          Dispatcher console
+          Admin command centre
         </p>
 
         <h1 className="mt-2 font-display text-3xl font-semibold text-navy">
@@ -427,6 +428,7 @@ export default function DispatcherDashboard() {
       )}
 
       <DispatchCaseOperations trips={trips} />
+      <MaritimeAdvisories />
 
       {/* Fleet summary */}
 

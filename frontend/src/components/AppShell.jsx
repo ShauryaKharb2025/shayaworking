@@ -1,10 +1,12 @@
+import OperationalStatus from "./OperationalStatus";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { roleHome } from "../utils/roles";
 import { useAuth } from "../context/AuthContext";
-import { Home, Ambulance, Building2, Bell, UserRound, Menu, X } from "./Icons";
-const rolePaths = {patient:["/"],driver:["/driver"],hospital:["/hospital"]};
+import { Home, ShieldCheck, Ambulance, Building2, Bell, UserRound, Menu, X } from "./Icons";
+const rolePaths = {admin:["/admin"],patient:["/"],driver:["/driver"],hospital:["/hospital"]};
 const roles = [
+ ["/admin","Command centre",ShieldCheck],
  ["/", "Patient / SOS", Home],
  ["/driver","Ambulance / Driver",Ambulance],
  ["/hospital","Hospital",Building2],
@@ -44,6 +46,6 @@ export default function AppShell({children}) {
    <div className="sahay-sidebar-bottom"><span className="sahay-simulation-dot"/> Simulation environment<Link to="tel:112">Emergency helpline <b>112 ↗</b></Link>{user&&<button onClick={logout}>Sign out · {user.name?.split(" ")[0]}</button>}</div>
   </aside>
   {open&&<button className="sahay-scrim" aria-label="Close navigation" onClick={()=>setOpen(false)}/>}
-  <main className="sahay-main" inert={open?"":undefined}>{children}</main>
+  <main className="sahay-main" inert={open?"":undefined}>{user&&<OperationalStatus detailed={user.role==="admin"}/>} {children}</main>
  </div>
 }

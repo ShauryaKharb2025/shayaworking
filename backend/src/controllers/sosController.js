@@ -81,6 +81,10 @@ async function createSOS(req, res) {
     if (!validRequirements(requiredEquipment) || !validRequirements(requiredSpecialties)) {
       return res.status(400).json({ message: "Invalid equipment or specialty requirements." });
     }
+    if((address!==undefined && (typeof address!=="string" || address.length>1500)) || typeof channel!=="string" || channel.length>30 || symptoms.length>30 || symptoms.some(value=>value.length>1000))return res.status(400).json({message:"Invalid incident details"});
+    const requestKey=req.get("Idempotency-Key") || null;
+    if(requestKey && !/^[a-zA-Z0-9_-]{8,128}$/.test(requestKey))return res.status(400).json({message:"Invalid idempotency key"});
+    const fingerprint=require("node:crypto").createHash("sha256").update(JSON.stringify({lng,lat,address:address||"",channel,symptoms,requestedAmbulanceTier,requiredEquipment,requiredSpecialties})).digest("hex");
     const coverage = await checkCoverage(lng, lat);
 
     // ---------------------------------------------------------
@@ -95,8 +99,20 @@ async function createSOS(req, res) {
 const isCovered =
   coverage === "live" || coverage === "limited";
 
-const trip = await Trip.create({
+let replayed=false;
+const trip = await require("../data/repository").transaction(async()=>{
+ const tx=require("../data/repository").client();
+ await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${req.user.sub} FOR UPDATE`;
+ const existing=await tx.trip.findFirst({where:requestKey?{patientId:req.user.sub,requestKey}:{
+  patientId:req.user.sub,requestFingerprint:fingerprint,status:{notIn:["cancelled","handed_off"]},createdAt:{gte:new Date(Date.now()-120000)},
+ }});
+ if(existing){
+  if(existing.requestFingerprint!==fingerprint)throw Object.assign(new Error("Request key was already used with different incident details"),{status:409});
+  replayed=true;return Trip.findById(existing.id);
+ }
+ return Trip.create({
   patient: req.user.sub,
+  requestKey,requestFingerprint:fingerprint,
   channel,
   symptoms,
   requestedAmbulanceTier,
@@ -121,6 +137,8 @@ const trip = await Trip.create({
   autoDispatchAt: isCovered ? new Date() : null,
   events: [{ type: "sos:received", at: new Date().toISOString() }],
 });
+});
+    if(replayed)return res.status(200).json({trip,replayed:true,message:"Existing emergency request"});
     if (coverage === "coming_soon") {
       return res.status(201).json({
         trip,
@@ -160,8 +178,8 @@ const trip = await Trip.create({
   } catch (err) {
     console.error("[sos] createSOS error:", err);
 
-    return res.status(500).json({
-      message: "Could not process SOS request",
+    return res.status(err.status || 500).json({
+      message: err.status ? err.message : "Could not process SOS request",
     });
   }
 }
@@ -205,7 +223,7 @@ async function getTrip(req, res, next) {
       path: "ambulance", populate: { path: "driver", select: "name phone" },
     });
     const publicEvents = trip.events.map(({ _id, type, at, payload }) => ({
-      _id, type, at, ...(["journey:demo_drive_started","journey:demo_hospital_drive_started"].includes(type) ? { payload } : {}),
+      _id, type, at, ...(["journey:demo_drive_started","journey:demo_hospital_drive_started","simulation:gps_interrupted"].includes(type) ? { payload } : {}),
     }));
     const { careDetails, ...publicTrip } = trip.toJSON();
     const result = { ...publicTrip, events: publicEvents, proposedHospital: referral?.hospital || null };

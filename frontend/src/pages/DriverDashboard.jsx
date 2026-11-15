@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import api from "../api/axios";
 import { ClinicalObservations, SpecialistBooking } from "../components/CaseWorkflow";
 import JourneyMap from "../components/JourneyMap";
+import RescueSimulationControl from "../components/RescueSimulationControl";
 import { connectSocket } from "../api/socket";
 
 export default function DriverDashboard() {
@@ -31,7 +32,7 @@ export default function DriverDashboard() {
   socket.emit("join:driver");
 
   const handleTripAssigned = (payload) => {
-    console.log("[driver] trip assigned:", payload);
+
 
     if (payload?.trip) {
       setTrip(payload.trip);
@@ -48,7 +49,7 @@ export default function DriverDashboard() {
   };
 
   const handleTripMatched = (payload) => {
-    console.log("[driver] trip matched:", payload);
+
 
     if (payload?.trip) {
       setTrip(payload.trip);
@@ -613,6 +614,7 @@ useEffect(() => {
           </section>
           <section className="mt-4 rounded-lg bg-paper p-4"><h3>Patient emergency</h3><p>{trip.symptoms?.join(", ") || trip.triage?.notes || "No symptom description recorded"}</p></section>
           <JourneyMap trip={{...trip, ambulance: ambulance || trip.ambulance}} />
+          <RescueSimulationControl trip={trip}/>
           {trip.status!=="offered" && <CaseCarePanel key={trip._id} caseId={trip._id}/>}
           {["picked_up","en_route_hospital","arrived_hospital"].includes(trip.status) && <>
             <details><summary>Record a clinical or treatment update</summary><ClinicalObservations caseId={trip._id}/></details>

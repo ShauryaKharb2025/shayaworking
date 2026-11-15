@@ -1,3 +1,4 @@
+import { etaLabel } from "../utils/eta";
 import {
   useEffect,
   useMemo,
@@ -866,7 +867,7 @@ const markers =
 
             <p className="mt-1 text-xl font-semibold text-navy">
               {trip.etaMinutes
-                ? `${trip.etaMinutes} min`
+                ? `${trip.etaMinutes} min · ${etaLabel(trip.etaSource)}`
                 : "Updating…"}
             </p>
           </div>

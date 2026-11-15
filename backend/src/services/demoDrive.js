@@ -24,18 +24,13 @@ async function beginDemoDrive(tripId, driverId, destination = "pickup") {
   const start = hospitalLeg ? trip.ambulance.location.coordinates : [longitude, latitude];
   let coordinates = [start, end];
   let road = false;
-  try {
-    const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${start.join(',')};${end.join(',')}?overview=full&geometries=geojson`, { signal: AbortSignal.timeout(5000) });
-    const result = await response.json();
-    if (response.ok && result.routes?.[0]?.geometry?.coordinates?.length > 1) {
-      coordinates = [start, ...result.routes[0].geometry.coordinates, end];
-      road = true;
-    }
-  } catch {}
+  const route=await require("./routing").roadRoute(start,end);
+  coordinates=[start,...route.coordinates,end];
+  road=route.source==="osrm";
   const at = new Date().toISOString();
   await db.$transaction(async tx => {
     const result = await tx.trip.updateMany({ where: { id: tripId, version: trip.version, status: trip.status }, data: {
-      status: travellingStatus, autoDispatchAt: null, dispatchedAt: new Date(), etaMinutes: 1, version: { increment: 1 },
+      status: travellingStatus, autoDispatchAt: null, ...(!hospitalLeg ? {dispatchedAt:new Date()} : {}), etaMinutes: 1, etaSource: "simulation", version: { increment: 1 },
       events: [...trip.events,
         ...(!hospitalLeg ? [{ _id: randomUUID(), type: 'status:dispatched', at, actorId: driverId }] : []),
         { _id: randomUUID(), type: "status:" + travellingStatus, at, actorId: driverId },
@@ -50,6 +45,7 @@ async function advanceDemoDrives(io) {
   if (process.env.NODE_ENV === 'production') return;
   const trips = await db.trip.findMany({ where: { status: { in: ['en_route','en_route_hospital'] } } });
   for (const trip of trips) {
+    if (gpsInterrupted(trip)) continue;
     const hospitalLeg = trip.status === 'en_route_hospital';
     const arrivalStatus = hospitalLeg ? 'arrived_hospital' : 'arrived_pickup';
     const event = trip.events.findLast(row => row.type === (hospitalLeg ? 'journey:demo_hospital_drive_started' : 'journey:demo_drive_started'));
@@ -71,4 +67,28 @@ async function advanceDemoDrives(io) {
   }
 }
 
-module.exports = { beginDemoDrive, advanceDemoDrives, positionOnRoute };
+function gpsInterrupted(trip, now=Date.now()) {
+  const gap=trip.events.findLast(row=>["simulation:gps_interrupted","simulation:gps_restored"].includes(row.type));
+  return gap?.type==="simulation:gps_interrupted" && Date.parse(gap.payload.until)>now;
+}
+async function interruptDemoGps(tripId, driverId) {
+  const cfg=require("../integrations/maritime/config").config();
+  if(!cfg.simulation)throw Object.assign(new Error("Simulation controls are disabled"),{status:403});
+  await db.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT id FROM "Trip" WHERE id=${tripId} FOR UPDATE`;
+    const trip=await tx.trip.findUnique({where:{id:tripId},include:{patient:true,ambulance:true}});
+    if(trip?.patient.email!=="patient@sahay.org" || trip.ambulance?.driverId!==driverId)throw Object.assign(new Error("Assigned synthetic case required"),{status:403});
+    if(!["en_route","en_route_hospital"].includes(trip.status)||gpsInterrupted(trip))throw Object.assign(new Error("A moving mock drive without an active interruption is required"),{status:409});
+    await tx.trip.update({where:{id:tripId},data:{version:{increment:1},events:[...trip.events,{_id:randomUUID(),type:"simulation:gps_interrupted",at:new Date().toISOString(),payload:{until:new Date(Date.now()+Math.max(180000,cfg.gpsMs+60000)).toISOString()}}]}});
+  });
+}
+async function restoreDemoGps(tx,trip) {
+  if(process.env.NODE_ENV==="production" || !gpsInterrupted(trip))return null;
+  const event=trip.events.findLast(row=>row.type===(trip.status==="en_route_hospital"?"journey:demo_hospital_drive_started":"journey:demo_drive_started"));
+  if(!event || event.payload.vehicleId!==trip.ambulanceId)throw Object.assign(new Error("Mock route is no longer current"),{status:409});
+  const coordinates=positionOnRoute(event.payload.coordinates,(Date.now()-Date.parse(event.at))/event.payload.durationMs);
+  await tx.ambulance.update({where:{id:trip.ambulanceId},data:{location:{type:"Point",coordinates},lastPingAt:new Date(),version:{increment:1}}});
+  await tx.trip.update({where:{id:trip.id},data:{version:{increment:1},events:[...trip.events,{_id:randomUUID(),type:"simulation:gps_restored",at:new Date().toISOString(),payload:{simulated:true}}]}});
+  return coordinates;
+}
+module.exports = { beginDemoDrive, advanceDemoDrives, positionOnRoute, gpsInterrupted, interruptDemoGps, restoreDemoGps };

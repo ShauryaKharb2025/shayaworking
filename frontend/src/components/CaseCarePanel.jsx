@@ -1,3 +1,4 @@
+import { etaLabel } from "../utils/eta";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useCaseResource } from "../hooks/useCaseResource";
@@ -85,7 +86,7 @@ export default function CaseCarePanel({caseId}) {
   <h2>Care coordination</h2>
   <div className="sahay-care-next"><strong>{next}</strong><span>Responsible · {owner}</span></div>
   <p>Receiving hospital acknowledgement · {data.acknowledgement || "Pending"}</p>
-  <p>ETA · {data.etaMinutes!=null?data.etaMinutes+" min to "+data.etaDestination:"Unavailable"} · Updated {time(data.etaUpdatedAt)}</p>
+  <p>{etaLabel(data.etaSource)} · {data.etaMinutes!=null?data.etaMinutes+" min to "+data.etaDestination:"Unavailable"} · Updated {time(data.etaUpdatedAt)}</p>
   <p>GPS · {stale?"Stale or unavailable":"Current"} · Last seen {time(data.gpsLastSeen)}</p>
   {data.delayed&&<p role="status" className="sahay-care-delay">Expected hospital arrival has passed. Receiving team should review the latest ETA.</p>}
   {data.hospital&&<p>Destination · {data.hospital.name} · {data.hospital.address || "Address not recorded"} · {data.hospital.contact || "Contact not recorded"}</p>}

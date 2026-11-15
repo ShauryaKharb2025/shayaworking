@@ -1,3 +1,4 @@
+const { roadRoute } = require("../services/routing");
 const { kickOrchestration } = require("../services/autoDispatchService");
 const prisma = require("../data/prisma");
 const { ambulanceCandidates, distanceKm } = require("../services/matching");
@@ -792,13 +793,14 @@ async function updateAmbulanceLocation(
         ? (await prisma.hospital.findUnique({ where: { id: trip.hospital } }))?.location.coordinates
         : trip.pickupLocation.coordinates;
       if (target && ["dispatched", "en_route", "en_route_hospital"].includes(trip.status)) {
-        const etaMinutes = Math.ceil(distanceKm([numericLng, numericLat], target) * 2);
+        const route = await roadRoute([numericLng,numericLat],target);
+        const etaMinutes = Math.ceil(route.durationSeconds!=null ? route.durationSeconds/60 : route.distanceKm*2);
         const lastEta = trip.events.findLast(row => row.type === "journey:eta_updated");
         const significant = Math.abs(etaMinutes - (lastEta?.payload?.etaMinutes ?? trip.etaMinutes ?? etaMinutes)) >= 5 &&
           (!lastEta || Date.now() - new Date(lastEta.at) >= 30_000);
         await prisma.trip.updateMany({
           where: { id: trip._id, version: trip._version },
-          data: { etaMinutes, version: { increment: 1 }, ...(significant ? { events: [...trip.events, {
+          data: { etaMinutes, etaSource: route.source, version: { increment: 1 }, ...(significant ? { events: [...trip.events, {
             _id: require("node:crypto").randomUUID(), type: "journey:eta_updated", at: new Date().toISOString(), payload: { etaMinutes },
           }] } : {}) },
         });
@@ -966,7 +968,9 @@ async function updateTripStatus(
       trip.autoDispatchAt = null;
       trip.dispatchedAt = new Date();
       const vehicle = await Ambulance.findById(trip.ambulance);
-      trip.etaMinutes = Math.ceil(distanceKm(vehicle.location.coordinates, trip.pickupLocation.coordinates) * 2);
+      const route = await roadRoute(vehicle.location.coordinates, trip.pickupLocation.coordinates);
+      trip.etaMinutes = Math.ceil(route.durationSeconds!=null ? route.durationSeconds/60 : route.distanceKm*2);
+      trip.etaSource = route.source;
     }
     if (["arrived_pickup", "picked_up", "arrived_hospital", "handed_off"].includes(status)) trip.etaMinutes = null;
     if (status === "en_route_hospital") {
@@ -974,7 +978,9 @@ async function updateTripStatus(
         prisma.ambulance.findUnique({ where: { id: trip.ambulance } }),
         prisma.hospital.findUnique({ where: { id: trip.hospital } }),
       ]);
-      trip.etaMinutes = Math.ceil(distanceKm(vehicle.location.coordinates, destination.location.coordinates) * 2);
+      const route = await roadRoute(vehicle.location.coordinates, destination.location.coordinates);
+      trip.etaMinutes = Math.ceil(route.durationSeconds!=null ? route.durationSeconds/60 : route.distanceKm*2);
+      trip.etaSource = route.source;
     }
 
     /*

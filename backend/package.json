@@ -12,7 +12,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:studio": "prisma studio",
-    "test": "node --test --test-concurrency=1 tests/*.test.js",
+    "test": "node scripts/test.cjs",
     "db:postgis": "node scripts/enable-postgis.js"
   },
   "dependencies": {

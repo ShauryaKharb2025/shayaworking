@@ -140,6 +140,10 @@ function initSockets(io) {
        * ==========================
        */
 
+      socket.on("leave:trip", tripId => {
+        if (typeof tripId === "string") socket.leave(`trip:${tripId}`);
+      });
+
       socket.on(
         "join:trip",
         async (tripId) => {

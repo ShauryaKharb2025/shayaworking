@@ -39,3 +39,11 @@ describe("location detection & reverse geocoding", () => {
     await expect(detectLocation()).rejects.toThrow("accuracy is too low");
   });
 });
+
+
+it("refines a coarse first location and clears the GPS watcher",async()=>{
+ const clearWatch=vi.fn();
+ global.navigator.geolocation={getCurrentPosition:vi.fn(success=>success({coords:{latitude:28,longitude:77,accuracy:5000}})),watchPosition:vi.fn(success=>{success({coords:{latitude:28.63,longitude:77.21,accuracy:20}});return 42;}),clearWatch};
+ global.fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({city:"Delhi"})});
+ expect(await detectLocation()).toMatchObject({lat:28.63,lng:77.21,accuracy:20});expect(clearWatch).toHaveBeenCalledWith(42);
+});

@@ -2,16 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 export default function FleetMap({center={lat:28.635,lng:77.17},zoom=12,markers=[],ambulances=[],trips=[],zones=[]}) {
- const ref=useRef(null),map=useRef(null),layer=useRef(null);
+ const ref=useRef(null),map=useRef(null),layer=useRef(null),viewKey=useRef(null);
  const [offline,setOffline]=useState(false);
  useEffect(()=>{
-  const m=L.map(ref.current,{zoomControl:false}).setView([center.lat,center.lng],zoom);map.current=m;
+  const m=L.map(ref.current,{zoomControl:false,zoomAnimation:false}).setView([center.lat,center.lng],zoom);map.current=m;
   let errors=0;
   const tiles=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(m);
   tiles.on("tileerror",()=>{if(++errors>3)setOffline(true)});tiles.on("tileload",()=>setOffline(false));
   L.control.zoom({position:"topright"}).addTo(m);layer.current=L.layerGroup().addTo(m);
-  const observer=new ResizeObserver(()=>m.invalidateSize());observer.observe(ref.current);
-  return()=>{observer.disconnect();m.remove()};
+  const observer=new ResizeObserver(()=>m.invalidateSize({animate:false,pan:false}));observer.observe(ref.current);
+  return()=>{observer.disconnect();m.stop();m.remove();viewKey.current=null};
  },[]);
  useEffect(()=>{
   if(!layer.current)return;layer.current.clearLayers();
@@ -29,7 +29,8 @@ export default function FleetMap({center={lat:28.635,lng:77.17},zoom=12,markers=
    const label=document.createElement("span");label.textContent=zone.name+" · "+zone.status.replaceAll("_"," ");
    L.circle(p,{radius:zone.radiusKm*1000,color:zone.status==="live"?"#28a35f":"#c59542",weight:2,fillOpacity:.12}).addTo(layer.current).bindTooltip(label);
   }
-  if(bounds.length)map.current.fitBounds(L.latLngBounds(bounds).pad(.15),{maxZoom:13});
+  const key=JSON.stringify([all.map(pin=>pin.title || pin.label),zones.map(zone=>zone.name)]);
+  if(bounds.length && viewKey.current!==key){map.current.fitBounds(L.latLngBounds(bounds).pad(.15),{maxZoom:13,animate:false});viewKey.current=key;}
  },[markers,ambulances,trips,zones]);
  return <div className="sahay-map" style={{height:"100%",minHeight:400}}><div className="sahay-map-canvas" ref={ref}/><div className="sahay-map-live"><i className={offline?"offline":""}/>{offline?"Basemap offline · positions retained":"OpenStreetMap · last reported positions"}</div>{offline&&<div className="sahay-map-caption">Map tiles unavailable. Last reported coordinates are retained.</div>}</div>;
 }

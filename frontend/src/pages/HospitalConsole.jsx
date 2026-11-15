@@ -1,3 +1,4 @@
+import { etaLabel } from "../utils/eta";
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
@@ -104,7 +105,7 @@ export default function HospitalConsole() {
               <h3>{trip.patient?.name || "Patient name unavailable"}</h3>
               <p>{trip.status?.replaceAll("_"," ")}</p>
               <dl><div><dt>Ambulance</dt><dd>{trip.ambulance?.vehicleNumber || "Awaiting assignment"}</dd></div>
-                <div><dt>ETA</dt><dd>{trip.etaMinutes!=null ? trip.etaMinutes+" min" : "Unavailable"}</dd></div></dl>
+                <div><dt>{etaLabel(trip.etaSource)}</dt><dd>{trip.etaMinutes!=null ? trip.etaMinutes+" min" : "Unavailable"}</dd></div></dl>
             </article>)}</div>
           </section>
         </div>

@@ -1,3 +1,4 @@
+import { etaLabel } from "../utils/eta";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/axios";
@@ -200,7 +201,7 @@ export default function PatientDashboard() {
                         </p>
                         <p className="mt-1 font-semibold text-navy">
                           {trip.etaMinutes
-                            ? `${trip.etaMinutes} min`
+                            ? `${trip.etaMinutes} min · ${etaLabel(trip.etaSource)}`
                             : "Updating…"}
                         </p>
                       </div>

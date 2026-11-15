@@ -1,3 +1,4 @@
+const operational = {};
 const text = { type: "string" };
 const list = { type: "array", items: text, maxItems: 8 };
 const modules = {
@@ -83,7 +84,7 @@ async function defaultGenerate(request, apiKey) {
 
 async function explain(module, input, generate, timeoutMs = Math.min(15000, Math.max(250, Number(process.env.GEMINI_OPERATION_TIMEOUT_MS) || 5000))) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!generate && !apiKey) return { source: "deterministic", reason: "disabled" };
+  if (!generate && !apiKey) { operational[module]={status:"unavailable",source:"deterministic",reason:"not_configured"}; return { source: "deterministic", reason: "disabled" }; }
   const spec = modules[module];
   let timeout;
   const controller = new AbortController();
@@ -119,16 +120,24 @@ async function explain(module, input, generate, timeoutMs = Math.min(15000, Math
       },
     };
     const raw = await Promise.race([generate ? generate(request) : defaultGenerate(request, apiKey), deadline]);
-    return { source: "gemini", output: validateOutput(spec, input, raw) };
+    const output=validateOutput(spec,input,raw);
+    operational[module]={status:"healthy",source:"gemini",checkedAt:new Date().toISOString()};
+    return { source: "gemini", output };
   } catch (error) {
     if (process.env.GEMINI_DIAGNOSTICS === "1") {
       const status = Number.isInteger(error.status) ? error.status : null;
       console.error("[gemini]", module, controller.signal.aborted ? "timeout" : status ? "HTTP " + status : "invalid response or transport failure");
     }
+    operational[module]={status:"degraded",source:"deterministic",reason:controller.signal.aborted?"timeout":"unavailable",checkedAt:new Date().toISOString()};
     return { source: "deterministic", reason: "unavailable" };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-module.exports = { explain };
+function geminiStatus(){
+ if(!process.env.GEMINI_API_KEY?.trim())return {status:"unavailable",source:"deterministic",reason:"not_configured",modules:operational};
+ const results=Object.values(operational);
+ return {status:results.length && results.every(result=>result.status==="healthy")?"healthy":"degraded",modules:operational};
+}
+module.exports = { explain, geminiStatus };

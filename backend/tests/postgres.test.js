@@ -14,7 +14,7 @@ let server, patient, driver, dispatcher, admin, operator, vehicle;
 const ids = { users: [], trips: [], ambulances: [], operators: [], waits: [] };
 const base = "http://127.0.0.1:5051/api";
 async function api(path, user, method = "GET", body) {
- const response = await fetch(base + path, { method, headers: { "Content-Type":"application/json", ...(user ? {Authorization:"Bearer "+signAccessToken(user)} : {}) }, ...(body ? {body: JSON.stringify(body)} : {}) });
+ const response = await fetch(base + path, { method, headers: { "Content-Type":"application/json", ...(path==="/sos"&&method==="POST"?{"Idempotency-Key":randomUUID()}:{}), ...(user ? {Authorization:"Bearer "+signAccessToken(user)} : {}) }, ...(body ? {body: JSON.stringify(body)} : {}) });
  return { status: response.status, data: await response.json() };
 }
 before(async () => {
@@ -88,7 +88,7 @@ test("SOS, dispatch, nested relations, GPS and lifecycle remain API compatible",
  assert.equal((await Ambulance.findById(vehicle._id)).status,"idle");
  assert.equal((await api("/dispatch/fleet",null)).status,401);
 });
-test("referral replacement, caregiver revocation and clinical handoff persist", async () => {
+test("referral replacement and shared clinical handoff persist", async () => {
  const hospitalIds = [];
  try {
   for (let i = 0; i < 2; i++) {
@@ -127,18 +127,9 @@ test("referral replacement, caregiver revocation and clinical handoff persist", 
   assert.equal((await api("/hospitals/"+hospitalIds[0]+"/beds",second,"PATCH",{bedsAvailable:0})).status,403);
   assert.equal((await api("/hospitals/"+hospitalIds[0]+"/beds",first,"PATCH",{bedsAvailable:0,receivingReady:false})).status,200);
   await refer(hospitalIds[1],second);
-  const expired = await api(path+"/invitations",patient,"POST",{email:caregiver.email});
-  assert.equal(expired.status,201);
-  await prisma.caregiverAccess.updateMany({where:{tripId:id},data:{expiresAt:new Date(0)}});
-  assert.equal((await api("/cases/caregiver/redeem",caregiver,"POST",{token:expired.data.token})).status,403);
-  const invitation = await api(path+"/invitations",patient,"POST",{email:caregiver.email});
-  assert.equal(invitation.status,201);
-  assert.equal((await api("/cases/caregiver/redeem",caregiver,"POST",{token:invitation.data.token})).status,200);
-  assert.equal((await api(path+"/caregiver",caregiver)).status,200);
   const observation = {type:"vitals",note:"Synthetic measurement observed",familyVisible:true};
   assert.equal((await api(path+"/observations",patient,"POST",observation)).status,403);
   assert.equal((await api(path+"/observations",clinician,"POST",observation)).status,201);
-  assert.equal((await api(path+"/caregiver",caregiver)).data.observations[0].note,observation.note);
   const plan={type:"operation_plan",note:"Synthetic planned procedure awaiting treating-team assessment",familyVisible:false};
   assert.equal((await api(path+"/observations",first,"POST",plan)).status,403);
   assert.equal((await api(path+"/observations",second,"POST",plan)).status,201);
@@ -166,9 +157,6 @@ test("referral replacement, caregiver revocation and clinical handoff persist", 
   assert.equal((await api("/cases/hospital/specialists",second,"POST",availability)).status,201);
   assert.equal((await api("/cases/hospital/specialists",second,"POST",availability)).status,409);
 
-  const grants = await api(path+"/invitations",patient);
-  assert.equal((await fetch(base+path+"/invitations/"+grants.data.invitations.find(row=>row.userId===caregiver._id).id,{ method:"DELETE",headers:{Authorization:"Bearer "+signAccessToken(patient)} })).status,204);
-  assert.equal((await api(path+"/caregiver",caregiver)).status,403);
   for (const module of ["ambulance","hospital","coordination","journey"]) {
    const explanation = await api("/intelligence/trips/"+id+"/"+module,admin,"POST");
    assert.equal(explanation.status,200);
@@ -224,6 +212,49 @@ test("demo Hospital ER completes a confirmed receiving handoff at another select
  }
 });
 
+test("SOS retries are idempotent and reject a reused key with different data",async()=>{
+ const key=randomUUID(),body={lng:77.10,lat:28.75,symptoms:["Idempotency regression"]};
+ const call=payload=>fetch(base+"/sos",{method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":key,Authorization:"Bearer "+signAccessToken(patient)},body:JSON.stringify(payload)});
+ const responses=await Promise.all([call(body),call(body)]);
+ assert.deepEqual(responses.map(row=>row.status).sort(),[200,201]);
+ const results=await Promise.all(responses.map(row=>row.json()));
+ assert.equal(results[0].trip._id,results[1].trip._id);
+ ids.trips.push(results[0].trip._id);
+ assert.equal(await prisma.trip.count({where:{patientId:patient._id,requestKey:key}}),1);
+ assert.equal((await call({...body,lat:28.76})).status,409);
+});
+
+test("admin replacement offers preserve isolation and stop after patient pickup",async()=>{
+ const replacementDriver=await User.create({name:tag+" replacement",email:tag+"-replacement@test.invalid",role:"driver"});
+ ids.users.push(replacementDriver._id);
+ const replacement=await Ambulance.create({vehicleNumber:tag+"-replacement",operator:operator.id,driver:replacementDriver._id,tier:"ALS",status:"idle",complianceVerified:true,crew:[{role:"EMT",certified:true}],equipment:[],location:{coordinates:[77.1,28.75]}});
+ ids.ambulances.push(replacement._id);
+ const trip=await Trip.create({patient:patient._id,ambulance:vehicle._id,status:"offered",pickupLocation:{coordinates:[77.1,28.75]},requestedAmbulanceTier:"ALS"});
+ ids.trips.push(trip._id);
+ await prisma.ambulance.update({where:{id:vehicle._id},data:{status:"dispatched"}});
+ const path="/cases/"+trip._id+"/replacement",body={ambulanceId:replacement._id,reason:"Regression replacement"};
+ assert.equal((await api(path,patient,"POST",body)).status,403);
+ const approval=await api(path,admin,"POST",body);
+ assert.equal(approval.status,200,JSON.stringify(approval.data));
+ const updated=await prisma.trip.findUnique({where:{id:trip._id}});
+ assert.equal(updated.ambulanceId,replacement._id);
+ assert.equal(updated.status,"offered");
+ assert.equal((await prisma.ambulance.findUnique({where:{id:vehicle._id}})).status,"idle");
+ for(const status of ["dispatched","en_route","arrived_pickup","picked_up"])assert.equal((await api("/dispatch/trip/"+trip._id+"/status",replacementDriver,"PATCH",{status})).status,200);
+ assert.equal((await api(path,admin,"POST",{ambulanceId:vehicle._id,reason:"Too late"})).status,409);
+ assert.equal((await api("/dispatch/trip/"+trip._id+"/status",patient,"PATCH",{status:"cancelled"})).status,200);
+});
+
+test("removed dashboard APIs are unavailable and health identifies Gemini fallback",async()=>{
+ for(const path of ["/cases/clinician/queue","/cases/caregiver/cases","/cases/example/caregiver"]){
+  assert.equal((await api(path,patient)).status,404,path);
+ }
+ const response=await api("/health");
+ assert.equal(response.status,200);
+ assert.equal(response.data.components.postgres.status,"healthy");
+ assert.equal(response.data.components.gemini.status,"unavailable");
+});
+
 test("stale updates conflict; transactions roll back vehicle reservation",async()=>{
  const a = await Ambulance.findById(vehicle._id), b = await Ambulance.findById(vehicle._id);
  a.heading=10; await a.save();
@@ -260,4 +291,38 @@ test("waitlist and SQL demand aggregation work",async()=>{
  assert.equal(joined.status,201);
  const heatmap=await require("../src/data/prisma").waitlistEntry.groupBy({by:["pincodeOrArea"],_count:{_all:true},where:{pincodeOrArea:tag}});
  assert.equal(heatmap[0]._count._all,1);
+});
+
+
+test("socket events isolate simultaneous patient cases and recover after reconnect",async()=>{
+ const {io}=require("../../frontend/node_modules/socket.io-client");
+ const other=await User.create({name:tag+" other",email:tag+"-other@test.invalid",role:"patient"});ids.users.push(other._id);
+ const trips=await Promise.all([patient,other].map(u=>Trip.create({patient:u._id,pickupLocation:{coordinates:[77,28]}})));
+ const connect=async user=>{
+  const socket=io("http://127.0.0.1:5051",{autoConnect:false,auth:{token:signAccessToken(user)},transports:["websocket"],reconnection:false});
+  await new Promise((resolve,reject)=>{socket.once("connect",resolve);socket.once("connect_error",reject);socket.connect();});return socket;
+ };
+ const own=await connect(patient),outsider=await connect(other);let leaked=false;
+ outsider.on("trip:message",()=>{leaked=true;});
+ try{
+  const denied=new Promise(resolve=>outsider.once("trip:access_denied",resolve));outsider.emit("join:trip",trips[0]._id);await denied;
+  assert.equal((await api("/sos/"+trips[0]._id,other)).status,403);
+  own.emit("join:trip",trips[0]._id);outsider.emit("join:trip",trips[1]._id);
+  await new Promise(r=>setTimeout(r,80));
+  const received=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error("Event not delivered")),2000);own.once("trip:message",event=>{clearTimeout(timer);resolve(event);});});
+  own.emit("trip:message:send",{tripId:trips[0]._id,text:"Synthetic socket isolation check"});
+  assert.equal((await received).tripId,trips[0]._id);
+  own.disconnect();own.connect();await new Promise(resolve=>own.once("connect",resolve));
+  own.emit("join:trip",trips[0]._id);
+  const restored=await api("/sos/"+trips[0]._id,patient);
+  assert.equal(restored.data.trip.messages.at(-1).text,"Synthetic socket isolation check");
+  assert.equal(leaked,false);
+ }finally{own.disconnect();outsider.disconnect();}
+});
+
+
+test("routing and reverse-geocoding reject invalid coordinates and routing requires authentication",async()=>{
+ assert.equal((await api("/routing/route",null,"POST",{start:[77,28],end:[77.1,28.1]})).status,401);
+ assert.equal((await api("/routing/route",patient,"POST",{start:[999,28],end:[77,28]})).status,400);
+ assert.equal((await api("/location/reverse?lat=not-a-number&lng=77")).status,400);
 });

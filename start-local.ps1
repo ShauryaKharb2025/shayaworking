@@ -8,7 +8,9 @@ function Start-LocalService($name, $port, $directory, $arguments) {
     Write-Host "$name already has a listener on port $port"
     return
   }
-  Start-Process -FilePath $node -ArgumentList $arguments -WorkingDirectory $directory -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs "$name.log") -RedirectStandardError (Join-Path $logs "$name.error.log") | Out-Null
+  Start-Process -FilePath $node -ArgumentList $arguments -WorkingDirectory $directory -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logs "$name.log") -RedirectStandardError (Join-Path $logs "$name.error.log") -PassThru | ForEach-Object {
+    @{pid=$_.Id;started=$_.StartTime.ToUniversalTime().ToString("o");repo=$repo;arguments=$arguments} | ConvertTo-Json | Set-Content (Join-Path $logs "$name.pid.json")
+  }
 }
 Start-LocalService "postgres" 5433 (Join-Path $repo "backend") @("scripts/local-postgres.mjs")
 for ($i=0; $i -lt 60; $i++) {

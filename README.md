@@ -112,15 +112,44 @@ configuration has not been integration-tested.
     cd ../frontend
     npm run build
 
-Backend tests run against DATABASE_URL and start an isolated API on port 5051.
+Backend tests create a random disposable local database ending in `_test` using
+the DATABASE_URL server. TEST_DATABASE_URL can override it with another local database.
+The runner applies migrations, seeds on first use and starts an API on port 5051.
+It drops only its newly created random database; an explicit TEST_DATABASE_URL
+is retained. RESCUE authorization tests additionally use port 5053.
 They create uniquely named synthetic records and remove those records afterward.
-Use a development/test database for tests. Coverage fixtures come from npm run seed.
+Do not run another orchestration worker against that database while tests run.
 
-Seven integration tests cover foreign keys, Unicode, API compatibility, dispatch,
+The baseline backend tests cover foreign keys, Unicode, API compatibility, dispatch,
 GPS, cancellation, relations, messages, demand aggregation, stale saves,
 transaction rollback and competing reservations.
 
 ## Useful commands
+
+From the repository folder, stop tracked services with
+`powershell -ExecutionPolicy Bypass -File ./stop-local.ps1`.
+Use `-KeepDatabase` to leave PostgreSQL running, then run `start-local.ps1` again
+to restart the API and frontend. The stop script checks recorded process start
+times; untracked processes are left running. It preserves database files.
+
+Inspect logs with `Get-Content ./backend/.data/logs/api.log -Tail 50 -Wait`.
+Inspect component health with
+`Invoke-RestMethod http://127.0.0.1:5001/api/health | ConvertTo-Json -Depth 8`.
+HTTP 200 means database readiness; overall operationalStatus may be degraded.
+Gemini, OSRM and Socket.IO have separate statuses. OSRM status is degraded when
+the last route check is older than two minutes. Socket status describes the
+running transport and connected clients, not continuous delivery verification.
+
+Gemini was unavailable because its key was not configured. Deterministic
+fallback is visibly identified. OSRM geometry and road duration come through
+the authenticated backend route endpoint. Failures return labelled straight-line
+geometry and estimates. ETA labels distinguish road estimates, straight-line
+estimates and simulated travel. Public routing and map tiles have no application
+availability guarantee. This remains a synthetic, unvalidated emergency prototype.
+
+The current demo login cards include admin@sahay.org. Existing demo passwords
+are unchanged. Operator and dispatcher accounts have no dashboard login.
+No lint or TypeScript check is configured in this JavaScript repository.
 
 - npm run db:studio (in backend): inspect tables with Prisma Studio.
 - npm run db:migrate: apply checked-in migrations.
@@ -134,17 +163,18 @@ navigation, SOS / medical-help cards, three-step intake, incident details, OSM m
 case summary, response timeline and equipment/crew/hospital summary cards.
 Responsive styles reorganize these panels for tablet and mobile widths.
 
-Anonymous visitors see explicitly labelled synthetic preview data. Signed-in
-patients see their own API-backed cases, with a 10-second refresh. SOS pickup,
+Anonymous visitors are redirected to sign-in. Signed-in patients see their own
+API-backed cases, with socket updates and a 10-second recovery refresh. SOS pickup,
 symptoms and the requested ambulance tier are persisted. The tier is a preference
-for review, not automatic clinical triage. GPS without a recent timestamp is
+for capability matching, not clinically validated triage. GPS without a recent timestamp is
 labelled stale or unavailable. No road route is invented for real cases.
 The sample preview route is dashed and labelled illustrative.
 
-Dispatcher, driver, hospital and operator pages retain their connected operational
-tools inside the new design shell. Anonymous visitors can explore sample role
-layouts. Clinician and caregiver pages are design previews only; clinical entry,
-secure invitations and family summaries still need backend implementation.
+The active dashboards are Patient (`/sos`), Driver (`/driver`), Hospital
+(`/hospital`) and the existing Admin command centre (`/admin`). Caregiver and
+clinician dashboards, role previews and exclusive APIs have been removed.
+Shared clinical observations, specialist records and historical data remain.
+Sessions survive refresh; backend authorization remains authoritative.
 Non-emergency medical services display an availability explanation rather than
 pretending to book care. Existing trip messaging/cancellation controls are
 accessible from the case dashboard's Trip controls & messages link.
@@ -154,11 +184,21 @@ Network tile failures show an offline indication. Signed-in users can drag the
 pickup marker or explicitly request geolocation before submitting an SOS.
 
 Run frontend checks with npm test and npm run build from frontend.
-Nine component tests cover submission validation, stored request preferences,
+The frontend tests cover submission validation, stored request preferences,
 preview isolation, role navigation, notifications, unavailable service handling,
-API errors and unavailable clinical saving. Seven PostgreSQL integration tests
-also pass. Browser preview access was declined during implementation; visual
-inspection of the running desktop/mobile layouts has not been completed.
+API errors, token refresh, retired routes, map zoom and completed journey maps.
+Three complete browser journeys, including an OSRM outage, were verified locally.
+Desktop, tablet and mobile layouts were inspected for all four active roles.
+See docs/operational-verification.md for evidence and remaining limits.
+
+## Sahay RESCUE
+
+The Admin command centre includes optional, simulation-only incident intelligence.
+Maritime stays disabled by default and never blocks the primary emergency workflow.
+Its watchdog, durable queue, cloud container contract, safe recovery review and
+configuration are documented in [Maritime operations](docs/maritime-operations.md).
+Live integration requires server-side credentials and an approved deployed agent;
+the local mock is explicitly labelled. No paid cloud resource is created by startup.
 
 ## Brand assets
 

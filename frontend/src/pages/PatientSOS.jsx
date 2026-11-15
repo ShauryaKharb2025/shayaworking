@@ -1,3 +1,4 @@
+import { etaLabel } from "../utils/eta";
 import CaseCarePanel from "../components/CaseCarePanel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -20,9 +21,9 @@ export default function PatientSOS() {
  const [showFleet,setShowFleet]=useState(false);
  const [addressResults,setAddressResults]=useState([]);
  const [locationConfirmed,setLocationConfirmed]=useState(false),[processing,setProcessing]=useState(false);
- const requestGeneration=useRef(0),locationGeneration=useRef(0);
+ const requestGeneration=useRef(0),locationGeneration=useRef(0),submission=useRef(null);
  function invalidateLocation(){
-  locationGeneration.current+=1;setLocationConfirmed(false);setSelectedConditionId("");setSymptoms("");setNeeds("ALS");
+  submission.current=null;locationGeneration.current+=1;setLocationConfirmed(false);setSelectedConditionId("");setSymptoms("");setNeeds("ALS");
  }
  function clearQuery(){
   invalidateLocation();setAddress("");setPickup(null);setAddressResults([]);setError("");setMedical(false);
@@ -139,8 +140,7 @@ export default function PatientSOS() {
   setBusy(true);setProcessing(true);setError("");
   requestGeneration.current+=1;
   try{
-   const processingStarted = Date.now();
-   const {data}=await api.post("/sos",{
+   const payload={
     ...confirmedPickup,
     address,
     channel:"app",
@@ -148,8 +148,10 @@ export default function PatientSOS() {
     requestedAmbulanceTier:needs,
     requiredSpecialties:condition?[condition.specialty]:[],
     requiredEquipment:condition?condition.equipment:[],
-   });
-   await new Promise(resolve => setTimeout(resolve, Math.max(0, 2500 - (Date.now() - processingStarted))));
+   };
+   const serialized=JSON.stringify(payload);
+   if(submission.current?.serialized!==serialized)submission.current={serialized,key:crypto.randomUUID()};
+   const {data}=await api.post("/sos",payload,{headers:{"Idempotency-Key":submission.current.key}});
    setTrip(data.trip);clearQuery();navigate("/trip/"+data.trip._id);
   }catch(e){setError(e.response?.data?.message||"Could not send SOS. Please try again or call 112.");}
   finally{setBusy(false);setProcessing(false)}
@@ -159,10 +161,10 @@ export default function PatientSOS() {
  const stage=preview?2:({requested:0,offered:0,picked_up:4,arrived_hospital:4,matched:1,dispatched:1,en_route:2,arrived_pickup:2,en_route_hospital:4,handed_off:5}[trip?.status]??-1);
  const timeline=[
   ["SOS Received",preview?(currentCondition?.name || "Cardiac emergency (ALS)"):trip?trip.address||"Emergency request received":"Your request will appear here",trip?.createdAt],
-  ["Ambulance Assigned",preview?`${assignedAmbulance.vehicleNumber} (${assignedAmbulance.tier}) · Driver: ${assignedAmbulance.driver}`:ambulance?.vehicleNumber||"Finding nearest equipped ambulance",trip?.dispatchedAt],
-  ["Ambulance En Route",preview?`ETA: ${assignedAmbulance.etaMinutes} min · ${assignedAmbulance.distanceKm} km`:trip?.etaMinutes?("Estimated pickup: "+trip.etaMinutes+" min"):"ETA not yet available",null],
+  [trip?.dispatchedAt?"Ambulance accepted":"Ambulance offer pending",preview?`${assignedAmbulance.vehicleNumber} (${assignedAmbulance.tier}) · Driver: ${assignedAmbulance.driver}`:ambulance?.vehicleNumber||"Finding nearest equipped ambulance",trip?.events?.find(event=>event.type==="status:dispatched")?.at || trip?.dispatchedAt],
+  ["Ambulance En Route",preview?`ETA: ${assignedAmbulance.etaMinutes} min · ${assignedAmbulance.distanceKm} km`:trip?.etaMinutes?(etaLabel(trip.etaSource)+": "+trip.etaMinutes+" min"):"ETA not yet available",trip?.events?.find(event=>event.type==="status:en_route")?.at],
   ["Patient picked up", trip?.events?.some(event=>event.type==="status:picked_up") ? "Pickup confirmed by the ambulance crew · care assessment underway" : "Awaiting crew pickup confirmation", trip?.events?.find(event=>event.type==="status:picked_up")?.at],
-  [preview?"Hospital Confirmed":"Hospital destination",preview?`${currentCondition?.hospitalName || "AIIMS"} · ${currentCondition?.specialty || "Cardiac Care"}`:hospital?.name?hospital.name+" · confirmed":trip?.proposedHospital?.name?trip.proposedHospital.name+" · proposed":"Awaiting hospital selection",null],
+  [preview?"Hospital Confirmed":"Hospital destination",preview?`${currentCondition?.hospitalName || "AIIMS"} · ${currentCondition?.specialty || "Cardiac Care"}`:hospital?.name?hospital.name+" · confirmed":trip?.proposedHospital?.name?trip.proposedHospital.name+" · proposed":"Awaiting hospital selection",trip?.events?.find(event=>event.type==="hospital:confirmed")?.at],
   ["Patient Handoff",preview?"At hospital (after arrival)":trip?.handedOffAt?"Handoff recorded":"Pending hospital arrival and handoff",trip?.handedOffAt]
  ];
  const time=value=>value?new Date(value).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):"Pending";
@@ -216,14 +218,14 @@ export default function PatientSOS() {
    </div>
    <aside className="sahay-case-column">
     <section className="sahay-card sahay-case-summary"><div><div><span className="sahay-muted">Case ID</span><h2>{preview?"SH-CARD-001":trip?trip._id:loading?"Loading…":"No active case"}</h2></div><span className="sahay-case-badge"><HeartPulse size={20}/>{preview?`${currentCondition?.tier || "ALS"} (${currentCondition?.category || "Cardiac"})`:ambulance?.tier||"SOS"}</span></div><div className={"sahay-status "+(trip?.status==="cancelled"?"cancelled":"")}><span>i</span><b>Status:</b> {preview?"Ambulance En Route":loading?"Loading case…":statusLabels[trip?.status]||"Ready when you need help"}</div></section>
-    <section className="sahay-card sahay-timeline"><h2><ClipboardList/> Response Timeline</h2><ol>{timeline.map(([title,description,at],i)=><li key={title} className={i<stage?"complete":i===stage?"current":""}><span className="sahay-timeline-node">{i<stage?<Check size={14}/>:null}</span><div><div><strong>{title}</strong><time>{preview?(i===0?"10:24 AM":i===1?"10:26 AM":i===2?"10:27 AM":"Pending"):time(at)}</time></div><p>{description}</p></div></li>)}</ol>{!preview&&<p className="sahay-timeline-foot">Updates refresh every 10 seconds. Pending milestones are not confirmations.</p>}</section>
+    {trip && <section className="sahay-card sahay-timeline"><h2><ClipboardList/> Response Timeline</h2><ol>{timeline.map(([title,description,at],i)=><li key={title} className={i<stage?"complete":i===stage?"current":""}><span className="sahay-timeline-node">{i<stage?<Check size={14}/>:null}</span><div><div><strong>{title}</strong><time>{preview?(i===0?"10:24 AM":i===1?"10:26 AM":i===2?"10:27 AM":"Pending"):time(at)}</time></div><p>{description}</p></div></li>)}</ol>{!preview&&<p className="sahay-timeline-foot">Updates refresh every 10 seconds. Pending milestones are not confirmations.</p>}</section>}
     {trip && <SpecialistBooking caseId={trip._id}/>}
     {trip && canRequest && <JourneyLog key={"log-" + trip._id} caseId={trip._id} />}
    </aside>
   </div>
   <div className="sahay-summary-grid">
    <section className="sahay-card sahay-summary"><Ambulance/><div>
-    <span>Allocated ambulance &amp; driver</span>
+    <span>{trip?.status==="offered"?"Ambulance offer · awaiting driver acceptance":"Allocated ambulance & driver"}</span>
     <strong>{ambulance ? ambulance.vehicleNumber + " (" + ambulance.tier + ")" : preview ? assignedAmbulance.vehicleNumber + " (" + assignedAmbulance.tier + ")" : "Finding nearest equipped ambulance"}</strong>
     <p>{ambulance?.driver?.name || (preview ? assignedAmbulance.driver : "Awaiting an available driver")}</p>
     {ambulance?.driver?.phone && <a href={"tel:"+ambulance.driver.phone}>Call driver · {ambulance.driver.phone}</a>}
@@ -231,7 +233,7 @@ export default function PatientSOS() {
    <Summary icon={Users} label="Crew" value={preview?`Driver: ${assignedAmbulance.driver} · EMT (Certified)`:ambulance?.crew?.map(c=>c.role+(c.certified?" ✓":"")).join(" + ")||"Not yet recorded"}/>
    <Summary icon={ClipboardList} label={preview?"Equipment (Equipped for case)":ambulance?.complianceVerified?"Equipment · compliance verified":"Equipment"} value={preview?currentCondition?.equipment?.join(" · ")||"Ventilator · Defibrillator · ECG · Oxygen":ambulance?.equipment?.join(" · ")||"Not yet recorded"} small/>
    <Summary icon={Building2} label={preview?"Equipped Hospital":hospital?.name||"Hospital destination"} value={preview?currentCondition?.hospitalName||"AIIMS Apex Heart Institute":hospital?.name||(trip?.proposedHospital?.name ? trip.proposedHospital.name+" · receiving request pending" : "Selecting emergency-capable hospital")}/>
-   <Summary icon={Clock3} label={preview?"Sample ETA":"Estimated arrival"} value={preview?`${assignedAmbulance.etaMinutes} min (${assignedAmbulance.distanceKm} km)`:trip?.etaMinutes?trip.etaMinutes+" min · "+(trip.status==="en_route_hospital"?"to hospital":"to pickup"):"Not available"}/>
+   <Summary icon={Clock3} label={preview?"Sample ETA":etaLabel(trip?.etaSource)} value={preview?`${assignedAmbulance.etaMinutes} min (${assignedAmbulance.distanceKm} km)`:trip?.etaMinutes?trip.etaMinutes+" min · "+(trip.status==="en_route_hospital"?"to hospital":"to pickup"):"Not available"}/>
   </div>
   {preview && <div className="sahay-fleet-accordion">
    <button type="button" className="sahay-fleet-toggle" onClick={()=>setShowFleet(!showFleet)}>

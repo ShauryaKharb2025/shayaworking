@@ -103,6 +103,8 @@ model Trip {
   triggeredBy User? @relation("TriggeredTrips", fields: [triggeredById], references: [id])
   channel String @default("app")
   symptoms String[] @default([])
+  requestKey String?
+  requestFingerprint String?
   requestedAmbulanceTier String?
   pickupLocation Json
   address String?
@@ -115,6 +117,7 @@ model Trip {
   hospitalId String?
   hospital Hospital? @relation(fields: [hospitalId], references: [id])
   etaMinutes Float?
+  etaSource String?
   dispatchedAt DateTime?
   autoDispatchAt DateTime?
   arrivedPickupAt DateTime?
@@ -128,10 +131,12 @@ model Trip {
   healthReadings HealthReading[]
   doctorSlot DoctorSlot?
   journeyProjection JourneyProjection?
+  maritimeIncidents MaritimeIncident[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   version Int @default(0)
+  @@unique([patientId, requestKey])
   @@index([patientId, createdAt])
   @@index([status, autoDispatchAt])
   @@index([hospitalId])
@@ -218,4 +223,67 @@ model HealthReading {
   values Json
   measuredAt DateTime @default(now())
   @@index([tripId, measuredAt])
+}
+
+model MaritimeIncident {
+  id String @id @default(uuid())
+  tripId String
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  caseAlias String
+  category String
+  episodeKey String @unique
+  context String
+  status String @default("detected")
+  facts Json
+  evidence Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  resolvedAt DateTime?
+  audit Json @default("[]")
+  jobs MaritimeJob[]
+  @@index([tripId, createdAt])
+  @@index([status])
+}
+
+model MaritimeJob {
+  id String @id @default(uuid())
+  incidentId String
+  incident MaritimeIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  kind String @default("recovery")
+  status String @default("pending")
+  caseVersion Int
+  evidence Json
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseToken String?
+  leaseUntil DateTime?
+  lastError String?
+  startedAt DateTime?
+  completedAt DateTime?
+  advisory MaritimeAdvisory?
+  @@unique([incidentId, kind])
+  @@index([status, nextAttemptAt])
+}
+
+model MaritimeAdvisory {
+  id String @id @default(uuid())
+  jobId String @unique
+  job MaritimeJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  response Json
+  source String
+  reviewStatus String @default("pending")
+  reviewedBy String?
+  reviewedAt DateTime?
+  execution Json?
+  createdAt DateTime @default(now())
+}
+
+model MaritimeRuntime {
+  id String @id
+  requests Json @default("[]")
+  failures Int @default(0)
+  openUntil DateTime?
+  status String @default("not_checked")
+  reason String?
+  checkedAt DateTime?
 }

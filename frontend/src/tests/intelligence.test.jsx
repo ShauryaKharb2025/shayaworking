@@ -13,6 +13,6 @@ test("shows authoritative milestones and an empty treatment state without a gene
   render(<JourneyLog caseId="case-id" />);
   expect(await screen.findByText("Finding an available ambulance")).toBeTruthy();
   expect(screen.getAllByText(/Emergency request received/)).toHaveLength(2);
-  expect(screen.getByText("No treatment information has been recorded yet.")).toBeTruthy();
+  expect(screen.getByText("No observations are shared with this role yet.")).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
 });

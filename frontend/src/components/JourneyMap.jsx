@@ -1,3 +1,4 @@
+import api from "../api/axios";
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -12,7 +13,7 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
  const [roadRoute,setRoadRoute]=useState(null),[routeError,setRouteError]=useState("");
  const destination = trip?.hospital || trip?.proposedHospital;
  const routeStart = trip?.ambulance?.location?.coordinates;
- const transport = ["picked_up","en_route_hospital","arrived_hospital"].includes(trip?.status);
+ const transport = ["picked_up","en_route_hospital","arrived_hospital","handed_off"].includes(trip?.status);
  const demo = trip?.events?.findLast(event=>event.type===(transport ? "journey:demo_hospital_drive_started" : "journey:demo_drive_started"));
  const routeEnd = transport ? destination?.location?.coordinates : trip?.pickupLocation?.coordinates;
  const routeKey = !demo && valid(routeStart) && valid(routeEnd) ? [...routeStart,...routeEnd].join(",") : "";
@@ -23,21 +24,22 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
   const timer = setTimeout(async () => {
    try {
     const [lng,lat,endLng,endLat] = routeKey.split(",");
-    const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${lng},${lat};${endLng},${endLat}?overview=full&geometries=geojson`, {signal:controller.signal});
-    if (!response.ok) throw new Error();
-    const data = await response.json();
-    if (!data.routes?.[0]?.geometry?.coordinates?.length) throw new Error();
-    setRoadRoute(data.routes[0].geometry.coordinates.map(([x,y])=>[y,x]));
+    const {data}=await api.post("/routing/route",{start:[Number(lng),Number(lat)],end:[Number(endLng),Number(endLat)]},{signal:controller.signal});
+    if (!data.coordinates?.length) throw new Error();
+    setRoadRoute(data.coordinates.map(([x,y])=>[y,x]));
+    if(data.source!=="osrm")setRouteError("Straight-line fallback · road routing unavailable");
    } catch { if (!controller.signal.aborted) setRouteError("Road route unavailable"); }
   }, 500);
   return () => { clearTimeout(timer);controller.abort(); };
  }, [routeKey]);
 
+ const gap=trip?.events?.findLast(event=>["simulation:gps_interrupted","simulation:gps_restored"].includes(event.type));
+ const gpsInterrupted=gap?.type==="simulation:gps_interrupted" && Date.parse(gap.payload?.until)>Date.now();
  const trackingActive=["dispatched","en_route","en_route_hospital"].includes(trip?.status);
- const trackingLabel=trip?.status==="arrived_pickup"?"Ambulance at pickup":trip?.status==="picked_up"?"Patient pickup confirmed":["arrived_hospital","handed_off"].includes(trip?.status)?"Hospital arrival recorded":demo && trackingActive?"Mock ambulance moving":"Last reported position";
- const stale=trackingActive && (!trip.ambulance?.lastPingAt || Date.now()-new Date(trip.ambulance.lastPingAt).getTime()>90000);
+ const trackingLabel=gpsInterrupted?"Mock GPS interrupted · last position":trip?.status==="arrived_pickup"?"Ambulance at pickup":trip?.status==="picked_up"?"Patient pickup confirmed":["arrived_hospital","handed_off"].includes(trip?.status)?"Hospital arrival recorded":demo && trackingActive?"Mock ambulance moving":"Last reported position";
+ const stale=gpsInterrupted || trackingActive && (!trip.ambulance?.lastPingAt || Date.now()-new Date(trip.ambulance.lastPingAt).getTime()>90000);
  useEffect(()=>{
-  const instance=L.map(container.current,{zoomControl:false}).setView([28.635,77.17],12);
+  const instance=L.map(container.current,{zoomControl:false,zoomAnimation:false}).setView([28.635,77.17],12);
   map.current=instance;
   let errors=0;
   const tile=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'});
@@ -83,12 +85,12 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
     cancelAnimationFrame(motion.current);
     const from=vehicleMarker.current.getLatLng(), started=performance.now();
     const move=now=>{
-      const activeDemo = demo && ["en_route","en_route_hospital"].includes(trip.status);
+      const activeDemo = demo && !gpsInterrupted && ["en_route","en_route_hospital"].includes(trip.status);
       const progress=Math.min(1,(now-started)/2500);
       let position=[from.lat+(vehicle[0]-from.lat)*progress,from.lng+(vehicle[1]-from.lng)*progress];
       if (demo && routePoints?.length > 1) {
         const elapsed = Math.max(0,Math.min(1,(Date.now()-new Date(demo.at).getTime())/demo.payload.durationMs));
-        const fraction = activeDemo ? elapsed : 1;
+        const fraction = gpsInterrupted ? Math.max(0,Math.min(1,(Date.parse(trip.ambulance?.lastPingAt || demo.at)-Date.parse(demo.at))/demo.payload.durationMs)) : activeDemo ? elapsed : 1;
         const offset = fraction * (routePoints.length-1);
         const index = Math.min(Math.floor(offset),routePoints.length-2);
         position = routePoints[index].map((value,axis)=>value+(routePoints[index+1][axis]-value)*(offset-index));
@@ -131,7 +133,7 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
       [point(routeStart,null),point(routeEnd,null)].filter(Boolean);
     if(coordinates.length)map.current?.fitBounds(L.latLngBounds(coordinates).pad(.2),{maxZoom:16});
   }}>{transport ? "Show hospital route" : "Show pickup route"}</button> }
-  <div className="sahay-map-live"><i className={offline||stale?"offline":""}/>{(preview&&!pickup)?"Preview journey":trip?stale?"GPS stale / unavailable":trackingLabel:"Pickup selected"}<span>{offline?"Tiles unavailable":"OSM basemap"}</span></div>
+  <div className="sahay-map-live"><i className={offline||stale?"offline":""}/>{(preview&&!pickup)?"Preview journey":trip?gpsInterrupted?trackingLabel:stale?"GPS stale / unavailable":trackingLabel:"Pickup selected"}<span>{offline?"Tiles unavailable":"OSM basemap"}</span></div>
   {offline&&<div className="sahay-map-fallback"><Navigation/><strong>Map tiles unavailable</strong><span>Markers show the last known coordinates. Check your connection.</span></div>}
   <div className="sahay-map-caption">{demo && (demo.payload.road ? "Simulated drive on road route · " : "Simulated direct path · ")}{trip && !demo && (routeError || (roadRoute ? (transport ? "Road route to hospital · " : "Road route to pickup · ") : "Loading road route… "))}{(preview&&!pickup)?"Illustrative route · not live tracking":pickup?"Pickup location set · Drag pin to adjust":"Positions from case records"}</div>
  </section>

@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import PatientSOS from "../pages/PatientSOS";
-import RolePreview from "../pages/RolePreview";
 import AppShell from "../components/AppShell";
+import App from "../App";
 const mocks=vi.hoisted(()=>({user:null,get:vi.fn(),post:vi.fn(),patch:vi.fn(),navigate:vi.fn()}));
 vi.mock("../context/AuthContext",()=>({useAuth:()=>({user:mocks.user,logout:vi.fn()})}));
 vi.mock("../api/axios",()=>({default:{get:mocks.get,post:mocks.post,patch:mocks.patch}}));
@@ -19,7 +19,7 @@ describe("SOS dashboard",()=>{
   show(<PatientSOS/>);
   expect(screen.getByText("Interactive design preview")).toBeTruthy();
   expect(screen.getByRole("heading",{name:"Incident Details"})).toBeTruthy();
-  expect(screen.getByRole("heading",{name:"Response Timeline"})).toBeTruthy();
+  expect(screen.queryByRole("heading",{name:"Response Timeline"})).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:/Confirm & Send SOS/}));
   expect(mocks.navigate).toHaveBeenCalledWith("/login");
   expect(mocks.post).not.toHaveBeenCalled();
@@ -49,7 +49,7 @@ describe("SOS dashboard",()=>{
   fireEvent.change(screen.getByRole("textbox",{name:/Symptoms/}),{target:{value:"Synthetic chest pain"}});
   fireEvent.click(screen.getByRole("radio",{name:/BLS/}));
   fireEvent.click(screen.getByRole("button",{name:/Confirm & Send SOS/}));
-  await waitFor(()=>expect(mocks.post).toHaveBeenCalledWith("/sos",expect.objectContaining({lat:28.65,lng:77.15,symptoms:["Cardiac Arrest / Acute Coronary Syndrome","Synthetic chest pain"],requestedAmbulanceTier:"BLS"})));
+  await waitFor(()=>expect(mocks.post).toHaveBeenCalledWith("/sos",expect.objectContaining({lat:28.65,lng:77.15,symptoms:["Cardiac Arrest / Acute Coronary Syndrome","Synthetic chest pain"],requestedAmbulanceTier:"BLS"}),expect.objectContaining({headers:expect.objectContaining({"Idempotency-Key":expect.any(String)})})));
   await waitFor(()=>expect(mocks.navigate).toHaveBeenCalledWith("/trip/case-1"),{timeout:4000});
  });
  it("invalidates confirmation and condition when the address changes",async()=>{
@@ -124,6 +124,16 @@ describe("SOS dashboard",()=>{
   await waitFor(() => expect(mocks.patch).toHaveBeenCalledWith("/dispatch/trip/case-99/status", { status: "cancelled" }));
  });
 });
+describe("retired dashboard routes",()=>{
+ for(const path of ["/caregiver","/clinician"]){
+  it(path+" renders safe not-found content",async()=>{
+   mocks.user={id:"patient",role:"patient"};
+   render(<MemoryRouter initialEntries={[path]}><App/></MemoryRouter>);
+   expect(await screen.findByRole("heading",{name:"Page not found"})).toBeTruthy();
+   expect(screen.queryByText(/Caregiver dashboard|Clinician dashboard/)).toBeNull();
+  });
+ }
+});
 describe("shared role workspace",()=>{
  it("closes the role drawer on Escape and restores page scrolling",()=>{
   show(<AppShell><p>Workspace</p></AppShell>);
@@ -138,21 +148,12 @@ describe("shared role workspace",()=>{
  it("provides all role navigation and toggles notifications",()=>{
   show(<AppShell><p>Workspace</p></AppShell>);
   expect(screen.getByRole("link",{name:"Sahay home"}).querySelector("img").getAttribute("src")).toBe("/sahay-header.svg");
-  expect(screen.getByRole("navigation",{name:"Role navigation"}).querySelectorAll("a")).toHaveLength(3);
+  expect(screen.getByRole("navigation",{name:"Role navigation"}).querySelectorAll("a")).toHaveLength(4);
   fireEvent.click(screen.getByRole("button",{name:"Notifications"}));
   expect(screen.getByText("Sign in to receive updates for your cases.")).toBeTruthy();
   fireEvent.click(screen.getByRole("button",{name:"Close"}));
   expect(screen.queryByText("Sign in to receive updates for your cases.")).toBeNull();
  });
- it("labels unsupported clinical entry and prevents saving",()=>{
-  show(<RolePreview role="clinician"/>);
-  expect(screen.getByRole("status").textContent).toMatch(/not implemented/);
-  expect(screen.getByRole("button",{name:/Save milestone/}).disabled).toBe(true);
- });
- it("exposes sample case details without writing operational records",()=>{
-  show(<RolePreview role="dispatcher"/>);
-  fireEvent.click(screen.getByRole("button",{name:"Inspect sample case"}));
-  expect(screen.getByRole("status").textContent).toMatch(/offers and hospital acceptance are separate/);
-  expect(mocks.post).not.toHaveBeenCalled();
- });
+
+
 });

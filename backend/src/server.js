@@ -1,5 +1,6 @@
 const path = require("node:path");
 require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+for(const name of ["DATABASE_URL","JWT_SECRET","JWT_REFRESH_SECRET"])if(!process.env[name]?.trim())throw new Error(name+" is required");
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -35,13 +36,25 @@ app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_URL || "*", credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
-app.use(morgan("dev"));
+app.use(morgan((tokens,req,res)=>`${tokens.method(req,res)} ${tokens.url(req,res).split("?")[0]} ${tokens.status(req,res)} ${tokens["response-time"](req,res)} ms`));
 
 // Basic rate limiting on the SOS endpoint - it's the most sensitive one
 const sosLimiter = rateLimit({ windowMs: 60 * 1000, max: 10 });
 app.post("/api/sos", sosLimiter);
 
-app.get("/api/health", (req, res) => res.json({ status: "ok", service: "sahay-backend" }));
+app.get("/api/health", async (req,res)=>{
+ let postgres="healthy";
+ try {await require("./data/prisma").$queryRaw`SELECT 1`;}catch{postgres="unavailable";}
+ const gemini=require("./services/geminiIntelligence").geminiStatus();
+ const osrm=require("./services/routing").routingStatus();
+ const ready=postgres==="healthy";
+ res.status(ready?200:503).json({status:ready?"ok":"unavailable",service:"sahay-backend",
+  operationalStatus:!ready?"unavailable":gemini.status==="healthy"&&osrm.status==="healthy"?"healthy":"degraded",
+  components:{postgres:{status:postgres},gemini,osrm,realtime:{status:ready?"healthy":"unavailable",transport:"socket.io",connectedClients:io.engine.clientsCount}}});
+});
+app.post("/api/routing/route", rateLimit({windowMs:60000,max:120}), require("./middleware/auth").requireAuth, async(req,res,next)=>{
+ try{res.json(await require("./services/routing").roadRoute(req.body.start,req.body.end));}catch(error){next(error);}
+});
 
 app.get("/api/location/detect", async (req, res) => {
   for (const url of ["https://freeipapi.com/api/json", "https://ipwho.is/"]) {
@@ -58,7 +71,7 @@ app.get("/api/location/detect", async (req, res) => {
       }
     } catch {}
   }
-  res.json({ lat: 28.6139, lng: 77.2090, address: "Connaught Place, New Delhi" });
+  res.status(503).json({message:"Approximate location unavailable. Choose a pickup pin or use precise browser GPS."});
 });
 
 app.get("/api/location/search", async (req, res) => {
@@ -82,7 +95,7 @@ app.get("/api/location/search", async (req, res) => {
 
 app.get("/api/location/reverse", async (req, res) => {
   const { lat, lng } = req.query;
-  if (!lat || !lng) return res.status(400).json({ message: "lat and lng required" });
+  if (!lat || !lng || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng)) || Math.abs(Number(lat))>90 || Math.abs(Number(lng))>180) return res.status(400).json({ message: "Valid lat and lng required" });
   try {
     const response = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`, { signal: AbortSignal.timeout(2500) });
     if (response.ok) {
@@ -102,13 +115,14 @@ app.use("/api/hospitals", hospitalRoutes);
 app.use("/api/coverage", coverageRoutes);
 app.use("/api/cases", require("./routes/cases"));
 app.use("/api/intelligence", require("./routes/intelligence"));
+app.use("/api/maritime", require("./routes/maritime"));
 
 
 // 404 + error handler
 app.use((req, res) => res.status(404).json({ message: "Not found" }));
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(err.status || 500).json({ message: err.message || "Server error" });
+  console.error("[request]",err.status || 500,err.code || err.name);
+  res.status(err.status || 500).json({ message: err.status && err.status<500 ? err.message : "Server error" });
 });
 
 const PORT = process.env.PORT || 5000;
@@ -120,5 +134,7 @@ connectDB().then(() => {
     );
 
     startAutoDispatchWorker(io);
+    require("./integrations/maritime/worker").startWorker(io);
+    require("./services/routing").roadRoute([77.21,28.57],[77.22,28.58]).catch(()=>{});
   });
 }).catch(err => { console.error("[startup]", err.message); process.exit(1); });

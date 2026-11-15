@@ -13,31 +13,28 @@ api.interceptors.request.use((config) => {
 });
 
 // Transparent refresh-on-401, once, then give up
-let isRefreshing = false;
+let refreshPromise = null;
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
     const hasToken = !!localStorage.getItem("sahay_access_token");
-    if (!original.url?.includes("/auth/login") && error.response?.status === 401 && !original._retry && !isRefreshing && hasToken) {
+    if (!original?.url?.includes("/auth/login") && error.response?.status === 401 && !original._retry && hasToken) {
       original._retry = true;
-      isRefreshing = true;
       try {
-        const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        );
-        localStorage.setItem("sahay_access_token", data.accessToken);
-        original.headers.Authorization = `Bearer ${data.accessToken}`;
+        if (!refreshPromise) refreshPromise = axios.post(
+          `${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/auth/refresh`, {}, { withCredentials: true }
+        ).then(({data}) => {
+          localStorage.setItem("sahay_access_token",data.accessToken);
+          return data.accessToken;
+        }).finally(() => { refreshPromise = null; });
+        original.headers.Authorization = `Bearer ${await refreshPromise}`;
         return api(original);
       } catch (refreshErr) {
         localStorage.removeItem("sahay_access_token");
         localStorage.removeItem("sahay_user");
         window.location.href = "/login";
         return Promise.reject(refreshErr);
-      } finally {
-        isRefreshing = false;
       }
     }
     return Promise.reject(error);

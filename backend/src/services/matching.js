@@ -35,10 +35,12 @@ function ambulanceCandidates(trip, fleet) {
 function hospitalCandidates(trip, hospitals) {
   const required = Array.isArray(trip.triage?.requiredSpecialties) ? trip.triage.requiredSpecialties : [];
   return hospitals.map(hospital => ({
-    id: hospital.id,
+    id: hospital.id || hospital._id,
     label: hospital.name,
     specialties: hospital.specialties,
     bedsAvailable: hospital.bedsAvailable,
+    receivingReady: hospital.receivingReady,
+    location: hospital.location,
     eligible: hospital.receivingReady && hospital.bedsAvailable > 0 &&
       required.every(item => hospital.specialties.some(specialty => specialty.toLowerCase() === item.toLowerCase())),
     distanceKm: distanceKm(trip.pickupLocation.coordinates, hospital.location.coordinates),

@@ -15,7 +15,7 @@ async function fleet(req, res) {
   try {
     const ambulances = await Ambulance.find({
       status: { $ne: "offline" },
-    }).populate("operator", "name type");
+    }).populate("operator", "name type").populate("driver", "name email phone");
 
     return res.json({ ambulances });
   } catch (err) {
@@ -103,13 +103,6 @@ async function driverActiveTrip(req, res) {
   try {
     const ambulance = await Ambulance.findOne({
       driver: req.user.sub,
-      status: {
-        $in: [
-          "dispatched",
-          "en_route",
-          "stale",
-        ],
-      },
     }).populate(
       "operator",
       "name type verified"
@@ -118,7 +111,7 @@ async function driverActiveTrip(req, res) {
     if (!ambulance) {
       return res.json({
         trip: null,
-        ambulance: null,
+        ambulance,
       });
     }
 
@@ -710,6 +703,9 @@ async function updateAmbulanceLocation(
      * ==========================
      */
 
+    if (req.user.role === "operator" && ambulance.operator !== req.account.operatorId) {
+      return res.status(403).json({ message: "You can only update your own fleet" });
+    }
     ambulance.location = {
       type: "Point",
       coordinates: [

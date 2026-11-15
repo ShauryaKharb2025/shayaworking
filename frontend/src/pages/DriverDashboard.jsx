@@ -611,6 +611,7 @@ useEffect(() => {
               )}
             </div>
           </section>
+          <section className="mt-4 rounded-lg bg-paper p-4"><h3>Patient emergency</h3><p>{trip.symptoms?.join(", ") || trip.triage?.notes || "No symptom description recorded"}</p></section>
           <JourneyMap trip={{...trip, ambulance: ambulance || trip.ambulance}} />
           {trip.status!=="offered" && <CaseCarePanel key={trip._id} caseId={trip._id}/>}
           {["picked_up","en_route_hospital","arrived_hospital"].includes(trip.status) && <>

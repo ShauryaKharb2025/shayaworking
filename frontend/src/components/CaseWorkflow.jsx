@@ -51,7 +51,7 @@ function eventLabel(type) {
     "hospital:referral_unavailable": "Hospital referral withdrawn after availability changed",
     "status:dispatched": "Driver accepted the offer",
   };
-  return labels[type] || type.replace(/^(status:|observation:)/, "").replace(/[:_]/g, " ");
+  return labels[type] || (type ? type.replace(/^(status:|observation:)/, "").replace(/[:_]/g, " ") : "");
 }
 
 export function JourneyLog({ caseId }) {
@@ -116,6 +116,27 @@ export function Destinations({ tripId }) {
         {["proposed", "accepted"].includes(referral.status) && <button disabled={action.pending} onClick={() =>
           action.run("patch", path + "/referrals/" + referral.id, { action: "withdrawn" })}>Withdraw referral</button>}
       </div>)}
+      {(() => {
+        const nearestEligible = data.hospitals.find(h => h.eligible && data.confirmed?.id !== h.id);
+        if (!nearestEligible) return null;
+        return (
+          <div style={{ margin: "10px 0", padding: "10px", borderRadius: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span style={{ fontSize: "12px", fontWeight: 700, color: "#166534" }}>★ Nearest Equipped Hospital:</span>
+              <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#15803d" }}>
+                {nearestEligible.label} · {nearestEligible.distanceKm} km · {nearestEligible.bedsAvailable} beds ready
+              </p>
+            </div>
+            <button
+              disabled={action.pending}
+              style={{ background: "#16a34a", color: "#fff", border: 0, padding: "5px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: 650, cursor: "pointer" }}
+              onClick={() => action.run("post", path + "/referrals", { hospitalId: nearestEligible.id })}
+            >
+              Choose Nearest
+            </button>
+          </div>
+        );
+      })()}
       {data.hospitals.map(hospital => <div key={hospital.id}>
         {hospital.label} · {hospital.distanceKm} km · {hospital.bedsAvailable} free beds · {hospital.specialties.join(", ")}
         <button disabled={action.pending || !hospital.eligible || data.confirmed?.id === hospital.id} onClick={() =>

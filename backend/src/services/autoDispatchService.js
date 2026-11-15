@@ -54,11 +54,18 @@ async function allocate(trip, io, decide) {
         { status: "requested", ambulanceId: null, autoDispatchAt: new Date() });
       await tx.ambulance.update({ where: { id: trip.ambulanceId }, data: { status: "idle", version: { increment: 1 } } });
     });
-    if (driverId) io?.in(`driver:${driverId}`).socketsLeave(`trip:${trip.id}`);
+    if (driverId) {
+      io?.in(`driver:${driverId}`).socketsLeave(`trip:${trip.id}`);
+      io?.to(`driver:${driverId}`).emit("case:refresh", {tripId:trip.id});
+    }
     notify(io, trip);
     return;
   }
   if (trip.status !== "requested") return;
+  await db.ambulance.updateMany({
+    where: {status:"dispatched",trips:{none:{status:{in:["offered","dispatched","en_route","arrived_pickup","picked_up","en_route_hospital","arrived_hospital"]}}}},
+    data:{status:"idle",version:{increment:1}},
+  });
   const patient = await db.user.findUnique({ where: { id: trip.patientId }, select: { email: true } });
   const mock = process.env.NODE_ENV !== "production" && patient?.email === "patient@sahay.org";
   let fleet = await db.ambulance.findMany({ where: { status: "idle", driver: {

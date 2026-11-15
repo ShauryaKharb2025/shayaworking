@@ -59,7 +59,7 @@ test("automatic worker prioritizes nearest eligible vehicle, expires a reservati
     await processOrchestration(null, fallback, trip.id);
     assert.equal((await read()).ambulanceId, preferred.id);
   } finally {
-    await db.hospitalReferral.deleteMany({ where: { tripId: trip.id } });
+    await db.hospitalReferral.deleteMany({ where: { OR: [{ tripId: trip.id }, { hospitalId: hospital.id }] } });
     await db.trip.delete({ where: { id: trip.id } });
     await db.hospital.delete({ where: { id: hospital.id } });
     await db.ambulance.deleteMany({ where: { operatorId: fleet.id } });

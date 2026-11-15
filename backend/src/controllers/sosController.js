@@ -234,8 +234,15 @@ async function myTrips(req, res) {
   } : trip) });
 }
 
+async function cancelSOS(req, res, next) {
+  const { updateTripStatus } = require("./dispatchController");
+  req.body = { ...req.body, status: "cancelled" };
+  return updateTripStatus(req, res, next);
+}
+
 module.exports = {
   createSOS,
   getTrip,
   myTrips,
+  cancelSOS,
 };

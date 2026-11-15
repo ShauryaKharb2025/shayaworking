@@ -28,4 +28,3 @@ export function useCaseResource(path, period = 0) {
   }, [load, path, period]);
   return { data, error, load };
 }
-

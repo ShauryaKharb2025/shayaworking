@@ -101,6 +101,28 @@ describe("SOS dashboard",()=>{
   expect(screen.getByText("No active case")).toBeTruthy();
   expect(screen.queryByText(/Pre-Fetched Standby Network/)).toBeNull();
  });
+ it("allows a patient to cancel an active ambulance request",async()=>{
+  window.confirm = () => true;
+  mocks.user = { id: "patient", role: "patient" };
+  mocks.get.mockImplementation(async (path) => {
+    if (path === "/sos") {
+      return { data: { trips: [{ _id: "case-99", status: "requested", patientId: "patient" }] } };
+    }
+    if (path === "/sos/case-99") {
+      return { data: { trip: { _id: "case-99", status: "requested", patientId: "patient", events: [] } } };
+    }
+    if (path.endsWith("/journey")) {
+      return { data: { status: "requested", events: [], highlights: [], observations: [] } };
+    }
+    return { data: {} };
+  });
+  mocks.patch.mockResolvedValue({ data: { trip: { _id: "case-99", status: "cancelled" } } });
+  show(<PatientSOS/>);
+  const cancelBtns = await screen.findAllByRole("button", { name: "Cancel current & start new request" });
+  expect(cancelBtns.length).toBeGreaterThan(0);
+  fireEvent.click(cancelBtns[0]);
+  await waitFor(() => expect(mocks.patch).toHaveBeenCalledWith("/dispatch/trip/case-99/status", { status: "cancelled" }));
+ });
 });
 describe("shared role workspace",()=>{
  it("closes the role drawer on Escape and restores page scrolling",()=>{

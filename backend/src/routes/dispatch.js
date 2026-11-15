@@ -109,7 +109,8 @@ router.post(
   requireRole(
     "driver",
     "dispatcher",
-    "admin"
+    "admin",
+    "operator"
   ),
   updateAmbulanceLocation
 );

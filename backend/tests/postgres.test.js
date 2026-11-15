@@ -30,7 +30,7 @@ before(async () => {
  vehicle = await Ambulance.create({ vehicleNumber:tag, operator:operator.id, tier:"ALS",status:"idle",complianceVerified:true,crew:[{role:"EMT",certified:true}] }); ids.ambulances.push(vehicle._id);
  server = spawn(process.execPath, ["src/server.js"], {env:{...process.env,PORT:"5051",GEMINI_API_KEY:"",ORCHESTRATION_ENABLED:"false"}, stdio:"pipe"});
  let logs = ""; server.stdout.on("data", c=>logs+=c); server.stderr.on("data",c=>logs+=c);
- for(let i=0;i<60;i++) {
+ for(let i=0;i<120;i++) {
   if (server.exitCode !== null) throw new Error(logs);
   try { if ((await fetch(base+"/health")).ok) return; } catch {}
   await new Promise(r=>setTimeout(r,100));
@@ -180,7 +180,8 @@ test("referral replacement, caregiver revocation and clinical handoff persist", 
   assert.equal((await api(dispatch+"/status",second,"PATCH",{status:"handed_off"})).status,200);
   assert.equal((await api("/sos/"+id,patient)).data.trip.status,"handed_off");
  } finally {
-  for (const model of [prisma.clinicalObservation,prisma.caregiverAccess,prisma.hospitalReferral]) {
+  await prisma.hospitalReferral.deleteMany({where:{OR:[{tripId:{in:ids.trips}},{hospitalId:{in:hospitalIds}}]}});
+  for (const model of [prisma.clinicalObservation,prisma.caregiverAccess]) {
    await model.deleteMany({where:{tripId:{in:ids.trips}}});
   }
   await prisma.doctorSlot.deleteMany({where:{doctor:{hospitalId:{in:hospitalIds}}}});

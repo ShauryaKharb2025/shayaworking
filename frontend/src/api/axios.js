@@ -18,7 +18,8 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (!original.url?.includes("/auth/login") && error.response?.status === 401 && !original._retry && !isRefreshing) {
+    const hasToken = !!localStorage.getItem("sahay_access_token");
+    if (!original.url?.includes("/auth/login") && error.response?.status === 401 && !original._retry && !isRefreshing && hasToken) {
       original._retry = true;
       isRefreshing = true;
       try {

@@ -46,7 +46,7 @@ export default function JourneyMap({trip,preview=false,pickup,onPickup}) {
   L.control.zoom({position:"topright"}).addTo(instance);
   layers.current=L.layerGroup().addTo(instance);
   const observer=new ResizeObserver(()=>instance.invalidateSize({ animate: false, pan: false }));observer.observe(container.current);
-  return ()=>{observer.disconnect();cancelAnimationFrame(motion.current);vehicleMarker.current=null;viewKey.current=null;instance.stop();instance.remove();map.current=null};
+  return ()=>{observer.disconnect();cancelAnimationFrame(motion.current);vehicleMarker.current=null;viewKey.current=null;instance.stop();instance.stopLocate?.();instance.remove();map.current=null};
  },[]);
  useEffect(()=>{
   if(!map.current)return;

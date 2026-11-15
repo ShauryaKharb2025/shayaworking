@@ -144,7 +144,13 @@ const AMBULANCES = [
     tier: "ALS",
     driverName: "Ramesh Kumar",
     driverEmail: "driver.ramesh@sahay.local",
-    equipment: ["defibrillator", "ventilator", "ECG", "oxygen", "cardiac monitor", "infusion pump"],
+    equipment: [
+      "defibrillator", "ventilator", "ECG", "oxygen", "cardiac monitor", "infusion pump",
+      "suction", "trauma kit", "c-collar", "splint", "nebulizer", "sterile burn dressing",
+      "IV fluids", "pediatric intubation kit", "neonatal suction", "obstetric delivery kit",
+      "antidote kit", "vasopressor kit", "potassium binder kit", "traction kit",
+      "rapid infusion kit", "first aid", "glucometer", "IV dextrose", "saline"
+    ],
     crew: [{ name: "Ramesh Kumar", role: "Driver-EMT", certified: true }, { name: "Dr. K. Nair", role: "Paramedic", certified: true }],
     coordinates: [77.2150, 28.5700],
   },

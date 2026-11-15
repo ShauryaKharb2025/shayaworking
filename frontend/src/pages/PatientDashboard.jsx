@@ -4,15 +4,18 @@ import api from "../api/axios";
 
 const STATUS_LABEL = {
   requested: "Finding an ambulance",
+  offered: "Connecting with nearest ambulance",
   matched: "Ambulance matched",
   dispatched: "Ambulance dispatched",
   en_route: "Ambulance is on the way",
   arrived_pickup: "Ambulance has arrived",
   en_route_hospital: "En route to hospital",
+  cancelled: "Request cancelled",
 };
 
 const ACTIVE_STATUSES = [
   "requested",
+  "offered",
   "matched",
   "dispatched",
   "en_route",
@@ -24,6 +27,7 @@ export default function PatientDashboard() {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [cancellingId, setCancellingId] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -63,6 +67,24 @@ export default function PatientDashboard() {
   const pastTrips = trips.filter(
     (trip) => !ACTIVE_STATUSES.includes(trip.status)
   );
+
+  async function handleCancelTrip(tripId) {
+    if (!window.confirm("Are you sure you want to cancel this ambulance request?")) return;
+    try {
+      setCancellingId(tripId);
+      setError("");
+      await api.patch(`/dispatch/trip/${tripId}/status`, { status: "cancelled" });
+      setTrips((prev) =>
+        prev.map((t) => (t._id === tripId ? { ...t, status: "cancelled" } : t))
+      );
+    } catch (err) {
+      setError(
+        err.response?.data?.message || "Could not cancel ambulance request."
+      );
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-12">
@@ -184,12 +206,34 @@ export default function PatientDashboard() {
                       </div>
                     </div>
 
-                    <Link
-                      to={`/trip/${trip._id}`}
-                      className="mt-6 flex w-full items-center justify-center rounded-full bg-navy py-3.5 text-sm font-semibold text-white hover:bg-navy/90"
-                    >
-                      🚑 Live Tracking
-                    </Link>
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      <Link
+                        to={`/trip/${trip._id}`}
+                        className="flex-1 min-w-[180px] flex items-center justify-center rounded-full bg-navy py-3.5 text-sm font-semibold text-white hover:bg-navy/90"
+                      >
+                        🚑 Live Tracking
+                      </Link>
+
+                      {[
+                        "requested",
+                        "offered",
+                        "matched",
+                        "dispatched",
+                        "en_route",
+                        "arrived_pickup",
+                      ].includes(trip.status) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelTrip(trip._id)}
+                          disabled={cancellingId === trip._id}
+                          className="rounded-full border border-red-300 bg-red-50 px-5 py-3.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                        >
+                          {cancellingId === trip._id
+                            ? "Cancelling…"
+                            : "✕ Cancel Request"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

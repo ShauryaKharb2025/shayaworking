@@ -783,17 +783,37 @@ const markers =
 
       {/* HEADER */}
 
-      <div>
-        <p className="text-sm font-medium text-signal-dark">
-          Live emergency trip
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-signal-dark">
+            Live emergency trip
+          </p>
 
-        <h1 className="mt-2 font-display text-3xl font-semibold text-navy">
-          {STATUS_LABEL[
-            trip.status
-          ] ||
-            trip.status}
-        </h1>
+          <h1 className="mt-2 font-display text-3xl font-semibold text-navy">
+            {STATUS_LABEL[
+              trip.status
+            ] ||
+              trip.status}
+          </h1>
+        </div>
+
+        {[
+          "requested",
+          "waitlisted",
+          "offered",
+          "matched",
+          "dispatched",
+          "en_route",
+          "arrived_pickup",
+        ].includes(trip.status) && (
+          <button
+            onClick={handleCancelRequest}
+            disabled={cancelling}
+            className="rounded-full border border-red-300 bg-red-50 px-5 py-2.5 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {cancelling ? "Cancelling…" : "✕ Cancel Request"}
+          </button>
+        )}
       </div>
 
       {/* COVERAGE */}
@@ -1082,9 +1102,11 @@ const markers =
       {[
         "requested",
         "waitlisted",
+        "offered",
         "matched",
         "dispatched",
         "en_route",
+        "arrived_pickup",
       ].includes(
         trip.status
       ) && (
